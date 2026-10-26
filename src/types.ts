@@ -2,7 +2,7 @@
 // Positions/sizes are normalized (0..1) relative to the card bounding box so a
 // project renders identically at any resolution (live preview and export).
 
-export type LayerType = 'image' | 'text' | 'shape'
+export type LayerType = 'image' | 'text' | 'shape' | 'draw'
 
 export interface BaseLayer {
   id: string
@@ -68,7 +68,20 @@ export interface ShapeLayer extends BaseLayer {
   cornerRadius: number // fraction of card width
 }
 
-export type Layer = ImageLayer | TextLayer | ShapeLayer
+// A freehand stroke. `points` are flattened [x0,y0,x1,y1,...] normalized to the
+// card (0..1). `width` is a fraction of the card width so it scales on export.
+export interface DrawStroke {
+  color: string
+  width: number
+  points: number[]
+}
+
+export interface DrawLayer extends BaseLayer {
+  type: 'draw'
+  strokes: DrawStroke[]
+}
+
+export type Layer = ImageLayer | TextLayer | ShapeLayer | DrawLayer
 
 export type Finish =
   | 'matte'

@@ -1,6 +1,7 @@
 import type {
   Background,
   CardProject,
+  DrawLayer,
   ImageLayer,
   Layer,
   ShapeLayer,
@@ -348,10 +349,49 @@ function drawTextLayer(ctx: CanvasRenderingContext2D, l: TextLayer, w: number, h
   ctx.restore()
 }
 
+export function strokePath(
+  ctx: CanvasRenderingContext2D,
+  s: { color: string; width: number; points: number[] },
+  w: number,
+  h: number,
+) {
+  const p = s.points
+  if (p.length < 2) return
+  ctx.strokeStyle = s.color
+  ctx.lineWidth = Math.max(1, s.width * w)
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.beginPath()
+  ctx.moveTo(p[0] * w, p[1] * h)
+  if (p.length === 2) {
+    // a single tap: draw a dot
+    ctx.lineTo(p[0] * w + 0.01, p[1] * h)
+  } else {
+    // smooth with quadratic midpoints
+    for (let i = 2; i < p.length - 2; i += 2) {
+      const x = p[i] * w
+      const y = p[i + 1] * h
+      const xn = p[i + 2] * w
+      const yn = p[i + 3] * h
+      ctx.quadraticCurveTo(x, y, (x + xn) / 2, (y + yn) / 2)
+    }
+    ctx.lineTo(p[p.length - 2] * w, p[p.length - 1] * h)
+  }
+  ctx.stroke()
+}
+
+function drawDrawLayer(ctx: CanvasRenderingContext2D, l: DrawLayer, w: number, h: number) {
+  ctx.save()
+  ctx.globalAlpha = l.opacity
+  for (const s of l.strokes) strokePath(ctx, s, w, h)
+  ctx.restore()
+}
+
 function drawLayer(ctx: CanvasRenderingContext2D, l: Layer, w: number, h: number) {
   if (!l.visible) return
   if (l.type === 'image') drawImageLayer(ctx, l, w, h)
   else if (l.type === 'shape') drawShapeLayer(ctx, l, w, h)
+  else if (l.type === 'draw') drawDrawLayer(ctx, l, w, h)
   else drawTextLayer(ctx, l, w, h)
 }
 

@@ -1,6 +1,22 @@
-import type { ImageLayer, ShapeLayer, TextLayer } from '../types'
+import type { DrawLayer, ImageLayer, ShapeLayer, TextLayer } from '../types'
 import { uid } from '../types'
 import type { ImportedImage } from './image'
+
+export function createDrawLayer(): DrawLayer {
+  return {
+    id: uid(),
+    type: 'draw',
+    name: 'Dessin',
+    x: 0.5,
+    y: 0.5,
+    scale: 1,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    strokes: [],
+  }
+}
 
 export function createImageLayer(img: ImportedImage): ImageLayer {
   return {

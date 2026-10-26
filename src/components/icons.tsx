@@ -160,6 +160,13 @@ export const IconLock = (p: SVGProps<SVGSVGElement>) => (
     <path d="M8 11V8a4 4 0 0 1 8 0v3" />
   </svg>
 )
+export const IconBrush = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M15 4l5 5-9 9-5 1 1-5z" />
+    <path d="M13 6l5 5" />
+    <path d="M4 20c1.5 0 2-1 2-2a2 2 0 0 0-2-2c-1 1-1 4 0 4z" />
+  </svg>
+)
 export const IconEye = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import CardPreview from '../components/CardPreview'
 import {
   IconBg,
+  IconBrush,
   IconClose,
   IconCopy,
   IconDown,
@@ -23,11 +24,21 @@ import { useSettings, previewWidth } from '../theme/settings'
 import { saveProject } from '../db/storage'
 import { exportProject } from '../studio/render'
 import { fileToDownscaledImage, pickImage, shareOrDownload, dataUrlToBlob } from '../studio/image'
-import { createImageLayer, createShapeLayer, createTextLayer, FONTS } from '../studio/layers'
-import type { CardProject, Finish, ImageLayer, Layer, ShapeKind, ShapeLayer, TextLayer } from '../types'
+import { createDrawLayer, createImageLayer, createShapeLayer, createTextLayer, FONTS } from '../studio/layers'
+import type {
+  CardProject,
+  DrawLayer,
+  DrawStroke,
+  Finish,
+  ImageLayer,
+  Layer,
+  ShapeKind,
+  ShapeLayer,
+  TextLayer,
+} from '../types'
 import { uid } from '../types'
 
-type Tab = 'layers' | 'bg' | 'object' | 'export'
+type Tab = 'layers' | 'bg' | 'object' | 'draw' | 'export'
 
 const clone = <T,>(p: T): T => JSON.parse(JSON.stringify(p))
 
@@ -52,6 +63,9 @@ export default function Studio({
   const [nameEdit, setNameEdit] = useState(false)
   const baseline = useRef<CardProject>(clone(initial))
   const dirty = useRef(false)
+  const [brushColor, setBrushColor] = useState('#D9B45B')
+  const [brushWidth, setBrushWidth] = useState(0.014)
+  const activeDrawRef = useRef<string | null>(null)
 
   const mutate = useCallback((fn: (draft: CardProject) => void) => {
     setProject((prev) => {
@@ -165,6 +179,52 @@ export default function Studio({
     setTab('object')
   }
 
+  function enterDraw() {
+    setTab('draw')
+    setSelectedId(null)
+    const cur = activeDrawRef.current
+    const exists = project.layers.some((l) => l.id === cur && l.type === 'draw')
+    if (!exists) {
+      const dl = createDrawLayer()
+      activeDrawRef.current = dl.id
+      mutate((d) => d.layers.push(dl))
+    }
+  }
+  function addStroke(s: DrawStroke) {
+    mutate((d) => {
+      let dl = d.layers.find((l) => l.id === activeDrawRef.current && l.type === 'draw') as
+        | DrawLayer
+        | undefined
+      if (!dl) {
+        dl = createDrawLayer()
+        activeDrawRef.current = dl.id
+        d.layers.push(dl)
+      }
+      dl.strokes.push(s)
+    })
+  }
+  function undoStroke() {
+    mutate((d) => {
+      const dl = d.layers.find((l) => l.id === activeDrawRef.current && l.type === 'draw') as
+        | DrawLayer
+        | undefined
+      if (dl) dl.strokes.pop()
+    })
+  }
+  function clearStrokes() {
+    mutate((d) => {
+      const dl = d.layers.find((l) => l.id === activeDrawRef.current && l.type === 'draw') as
+        | DrawLayer
+        | undefined
+      if (dl) dl.strokes = []
+    })
+  }
+  function newDrawLayer() {
+    const dl = createDrawLayer()
+    activeDrawRef.current = dl.id
+    mutate((d) => d.layers.push(dl))
+  }
+
   function duplicateLayer(id: string) {
     mutate((d) => {
       const i = d.layers.findIndex((l) => l.id === id)
@@ -230,10 +290,14 @@ export default function Studio({
           project={shown}
           width={previewWidth(settings.previewQuality)}
           showGrid={grid}
-          interactive={!compare}
+          interactive={!compare && tab !== 'draw'}
           selectedId={selectedId}
           onSelect={setSelectedId}
           onMove={(id, x, y) => updateLayer(id, { x, y })}
+          drawMode={tab === 'draw' && !compare}
+          brushColor={brushColor}
+          brushWidth={brushWidth}
+          onStroke={addStroke}
         />
       </div>
 
@@ -242,6 +306,7 @@ export default function Studio({
           <ToolTab active={tab === 'layers'} onClick={() => setTab('layers')} icon={<IconLayers />} label="Calques" />
           <ToolTab active={tab === 'bg'} onClick={() => setTab('bg')} icon={<IconBg />} label="Fond" />
           <ToolTab active={tab === 'object'} onClick={() => setTab('object')} icon={<IconShapes />} label="Objet" />
+          <ToolTab active={tab === 'draw'} onClick={enterDraw} icon={<IconBrush />} label="Dessin" />
           <ToolTab active={tab === 'export'} onClick={() => setTab('export')} icon={<IconExport />} label="Export" />
           <div className="spacer" />
           <ToolTab active={grid} onClick={() => setGrid((g) => !g)} icon={<IconLayers />} label="Grille" />
@@ -277,6 +342,17 @@ export default function Studio({
               onAlign={(axis) =>
                 selected && updateLayer(selected.id, axis === 'h' ? { x: 0.5 } : { y: 0.5 })}
               onAdd={{ image: addImage, text: addText, shape: addShape }}
+            />
+          )}
+          {tab === 'draw' && (
+            <DrawPanel
+              color={brushColor}
+              width={brushWidth}
+              onColor={setBrushColor}
+              onWidth={setBrushWidth}
+              onUndo={undoStroke}
+              onClear={clearStrokes}
+              onNewLayer={newDrawLayer}
             />
           )}
           {tab === 'export' && <ExportPanel project={project} onSave={saveNow} onDuplicate={duplicateProject} />}
@@ -371,6 +447,7 @@ function LayersPanel(props: {
 function layerLabel(l: Layer): string {
   if (l.type === 'text') return `“${l.text.slice(0, 16)}”`
   if (l.type === 'image') return 'Image'
+  if (l.type === 'draw') return `Dessin · ${l.strokes.length} trait(s)`
   return `Forme · ${l.shape}`
 }
 
@@ -564,6 +641,55 @@ function ShapeControls({ layer, onUpdate }: { layer: ShapeLayer; onUpdate: (p: P
       <ColorField label="Contour" value={layer.stroke} onChange={(c) => onUpdate({ stroke: c })} />
       <Slider label="Épaisseur contour" value={layer.strokeWidth} min={0} max={0.04} step={0.002} display={(v) => `${Math.round(v * 1000)}`} onChange={(v) => onUpdate({ strokeWidth: v })} />
     </>
+  )
+}
+
+// ---- Draw panel -------------------------------------------------------------
+function DrawPanel({
+  color,
+  width,
+  onColor,
+  onWidth,
+  onUndo,
+  onClear,
+  onNewLayer,
+}: {
+  color: string
+  width: number
+  onColor: (c: string) => void
+  onWidth: (w: number) => void
+  onUndo: () => void
+  onClear: () => void
+  onNewLayer: () => void
+}) {
+  return (
+    <div>
+      <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 14 }}>
+        Dessinez directement sur la carte avec le doigt. Chaque session de dessin crée un calque
+        que vous pouvez masquer, réordonner ou supprimer dans l’onglet Calques.
+      </p>
+      <ColorField label="Couleur du pinceau" value={color} onChange={onColor} />
+      <Slider
+        label="Épaisseur"
+        value={width}
+        min={0.004}
+        max={0.06}
+        step={0.002}
+        display={(v) => `${Math.round(v * 1000)}`}
+        onChange={onWidth}
+      />
+      <div className="grid-2 mb">
+        <button className="btn btn-ghost btn-sm" onClick={onUndo}>
+          <IconUndo width={16} /> Dernier trait
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={onClear}>
+          <IconTrash width={16} /> Tout effacer
+        </button>
+      </div>
+      <button className="btn btn-ghost btn-sm btn-block" onClick={onNewLayer}>
+        <IconBrush width={16} /> Nouveau calque de dessin
+      </button>
+    </div>
   )
 }
 
