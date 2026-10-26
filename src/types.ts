@@ -116,6 +116,8 @@ export interface VectorPath {
   sw?: number // stroke width in view units
   rule?: 'nonzero' | 'evenodd'
   alpha?: number // per-path opacity
+  clip?: string // SVG path: paint only inside this shape (shading, rim light)
+  blend?: GlobalCompositeOperation // e.g. 'multiply' for shadows, 'screen' / 'lighter' for light
 }
 
 export interface VectorShadow {

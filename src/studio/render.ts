@@ -461,6 +461,12 @@ function paintPaths(ctx: CanvasRenderingContext2D, l: VectorLayer) {
   const base = ctx.globalAlpha
   for (const p of l.paths) {
     const path = toPath(p.d)
+    const scoped = Boolean(p.clip || p.blend)
+    if (scoped) {
+      ctx.save()
+      if (p.clip) ctx.clip(toPath(p.clip))
+      if (p.blend) ctx.globalCompositeOperation = p.blend
+    }
     ctx.globalAlpha = base * (p.alpha ?? 1)
     if (p.fill) {
       ctx.fillStyle = paint(ctx, p.fill)
@@ -480,6 +486,7 @@ function paintPaths(ctx: CanvasRenderingContext2D, l: VectorLayer) {
         ctx.restore()
       }
     }
+    if (scoped) ctx.restore()
   }
   ctx.globalAlpha = base
 }
