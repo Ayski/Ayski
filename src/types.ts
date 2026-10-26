@@ -2,7 +2,7 @@
 // Positions/sizes are normalized (0..1) relative to the card bounding box so a
 // project renders identically at any resolution (live preview and export).
 
-export type LayerType = 'image' | 'text' | 'shape' | 'draw'
+export type LayerType = 'image' | 'text' | 'shape' | 'draw' | 'vector'
 
 export interface BaseLayer {
   id: string
@@ -81,7 +81,27 @@ export interface DrawLayer extends BaseLayer {
   strokes: DrawStroke[]
 }
 
-export type Layer = ImageLayer | TextLayer | ShapeLayer | DrawLayer
+// A vector illustration made of SVG path strings (rendered with Path2D).
+// `width` is the illustration width as a fraction of the card width; paths are
+// authored in a viewW × viewH box and scaled uniformly.
+export interface VectorPath {
+  d: string
+  fill?: string
+  stroke?: string
+  sw?: number // stroke width in view units
+  rule?: 'nonzero' | 'evenodd'
+}
+
+export interface VectorLayer extends BaseLayer {
+  type: 'vector'
+  viewW: number
+  viewH: number
+  width: number
+  paths: VectorPath[]
+  sketch?: boolean // hand-drawn double ink line
+}
+
+export type Layer = ImageLayer | TextLayer | ShapeLayer | DrawLayer | VectorLayer
 
 export type Finish =
   | 'matte'

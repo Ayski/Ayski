@@ -4,7 +4,7 @@ import { IconExport, IconSearch, IconStar, IconStarFill } from '../components/ic
 import { Sheet, useConfirm, useToast } from '../components/ui'
 import { deleteProject, getAllProjects, saveProject } from '../db/storage'
 import { exportProject } from '../studio/render'
-import { dataUrlToBlob, shareOrDownload } from '../studio/image'
+import { dataUrlToBlob, safeFileName, shareOrDownload } from '../studio/image'
 import { uid, type CardProject } from '../types'
 
 export default function MyCreations({ onOpen }: { onOpen: (p: CardProject) => void }) {
@@ -61,7 +61,7 @@ export default function MyCreations({ onOpen }: { onOpen: (p: CardProject) => vo
   async function exportProj(p: CardProject) {
     try {
       const url = await exportProject(p, 2048, 'image/png')
-      const result = await shareOrDownload(dataUrlToBlob(url), `${p.name.replace(/[^\w-]+/g, '_')}.png`)
+      const result = await shareOrDownload(dataUrlToBlob(url), `${safeFileName(p.name)}.png`)
       toast(result === 'shared' ? 'Partagé' : 'Image enregistrée')
     } catch (e) {
       toast((e as Error).message)

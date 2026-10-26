@@ -35,6 +35,9 @@ function hitTest(project: CardProject, faceKey: FaceKey, nx: number, ny: number)
     } else if (l.type === 'image') {
       hw = (l.fit * l.scale) / 2
       hh = hw * (l.naturalHeight / l.naturalWidth) * project.aspect
+    } else if (l.type === 'vector') {
+      hw = (l.width * l.scale) / 2
+      hh = hw * (l.viewH / l.viewW) * project.aspect
     }
     if (Math.abs(nx - l.x) <= hw + 0.03 && Math.abs(ny - l.y) <= hh + 0.03) return l
   }

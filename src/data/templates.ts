@@ -4,8 +4,59 @@ import {
   type Background,
   type CardProject,
   type DrawStroke,
+  type Finish,
   type Layer,
 } from '../types'
+import { INK, star as starPath, type Art } from './art/kit'
+import {
+  checks,
+  donut,
+  flask,
+  hauntedNight,
+  lasagna,
+  lazyCat,
+  mysteryVan,
+  portal,
+  seaBackdrop,
+  skyClouds,
+  sponge,
+  starfield,
+} from './art/cartoons'
+import {
+  brickGround,
+  checkerHills,
+  crewmate,
+  ghost,
+  glouton,
+  goldRings,
+  grassBlock,
+  hedgehog,
+  hellfire,
+  maze,
+  pickaxe,
+  pixelDemon,
+  pixelMushroom,
+  questionBlock,
+} from './art/games'
+import { dragon, knight, ninja, pirateGhost, robot, wizard } from './art/characters'
+import {
+  actionLines,
+  comicsBackdrop,
+  comicsBurst,
+  greatWave,
+  heroShield,
+  idPattern,
+  koi,
+  outrun,
+  palm,
+  ringedPlanet,
+  ripples,
+  rocket,
+  speechBubble,
+  swallow,
+  tattooHeart,
+  tattooStars,
+} from './art/scenes'
 
 export interface Template {
   key: string
@@ -184,6 +235,94 @@ function chip(x: number, y: number, plate: string, lines = 'rgba(0,0,0,0.32)'): 
 function contactless(x: number, y: number, color: string): Layer {
   const a = (50 * Math.PI) / 180
   return motif([0.018, 0.032, 0.046, 0.06].map((r) => arc(x - 0.03, y, r, -a, a, color, 0.0055)))
+}
+
+// ---- illustration builders ---------------------------------------------------
+interface VecOpts {
+  rotation?: number
+  sketch?: boolean
+  opacity?: number
+  locked?: boolean
+}
+
+// A vector illustration centred at (x, y), `width` as a fraction of the card.
+function vec(art: Art, x: number, y: number, width: number, o: VecOpts = {}): Layer {
+  return {
+    id: lid('v'),
+    type: 'vector',
+    name: 'Illustration',
+    x,
+    y,
+    scale: 1,
+    rotation: o.rotation ?? 0,
+    opacity: o.opacity ?? 1,
+    locked: o.locked ?? false,
+    visible: true,
+    viewW: art.viewW,
+    viewH: art.viewH,
+    width,
+    paths: art.paths,
+    sketch: o.sketch ?? true,
+  } as Layer
+}
+
+// Full-card decor, locked so taps go to the characters drawn on top.
+function backdrop(art: Art, o: VecOpts = {}): Layer {
+  return vec(art, 0.5, 0.5, 1, { sketch: false, locked: true, ...o })
+}
+
+interface CharacterCard {
+  key: string
+  name: string
+  kind: string
+  art: Art
+  colors: [string, string]
+  accent: string
+  stats: [string, number][]
+  stars: number
+  rarity: string
+  finish?: Finish
+}
+
+// Collectible trading-card layout: framed portrait, name, type, stat bars, stars.
+function characterCard(c: CharacterCard): Template {
+  const starsArt: Art = {
+    viewW: 100,
+    viewH: 22,
+    paths: [
+      {
+        d: Array.from({ length: c.stars }, (_, i) => starPath(90 - i * 20, 11, 9, 4)).join(''),
+        fill: c.accent,
+        stroke: INK,
+        sw: 1.6,
+      },
+    ],
+  }
+  const layers: Layer[] = [
+    shape({ shape: 'roundRect', x: 0.5, y: 0.5, width: 0.95, height: 0.91, fill: 'rgba(0,0,0,0)', stroke: c.accent, strokeWidth: 0.006, cornerRadius: 0.05 }),
+    shape({ shape: 'roundRect', x: 0.27, y: 0.52, width: 0.4, height: 0.76, fill: 'rgba(255,255,255,0.08)', stroke: c.accent, strokeWidth: 0.004, cornerRadius: 0.03 }),
+    shape({ shape: 'circle', x: 0.27, y: 0.5, width: 0.32, height: 0.32 * A, fill: c.accent, opacity: 0.22 }),
+    vec(c.art, 0.27, 0.53, 0.29),
+    vec(starsArt, 0.82, 0.875, 0.17, { sketch: false }),
+    text(c.name, { x: 0.52, y: 0.21, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.09, weight: 400, color: '#ffffff', shadow: true }),
+    text(c.kind, { x: 0.52, y: 0.33, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.042, weight: 700, letterSpacing: 0.004, color: c.accent }),
+  ]
+  c.stats.forEach(([label, v], i) => {
+    const y = 0.5 + i * 0.13
+    layers.push(
+      text(`${label} ${v}`, { x: 0.52, y, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.042, weight: 700, color: '#ffffff' }),
+      shape({ shape: 'roundRect', x: 0.795, y, width: 0.25, height: 0.045, fill: 'rgba(255,255,255,0.16)', cornerRadius: 0.01 }),
+      shape({ shape: 'roundRect', x: 0.67 + (0.25 * v) / 200, y, width: (0.25 * v) / 100, height: 0.045, fill: c.accent, cornerRadius: 0.01 }),
+    )
+  })
+  return {
+    key: c.key,
+    name: c.name,
+    category: 'Personnages',
+    badge: c.rarity,
+    background: bg({ kind: 'radial', color1: c.colors[0], color2: c.colors[1], finish: c.finish ?? 'gloss', glow: 0.35, grain: 0.08 }),
+    layers,
+  }
 }
 
 // ---- 28 original templates --------------------------------------------------
@@ -636,14 +775,401 @@ export const TEMPLATES: Template[] = [
       text('SPORT', { x: 0.08, y: 0.84, align: 'left', fontFamily: 'Oswald', italic: true, fontSize: 0.08, weight: 700, letterSpacing: 0.03, color: '#f5f5f7' }),
     ],
   },
+
+  // ---- Dessins: hand-drawn parodies (5 cartoons, 6 video games) ------------
+  {
+    key: 'drw-eponge',
+    name: 'Éponge des Mers',
+    category: 'Dessins',
+    badge: 'Animé',
+    background: bg({ kind: 'radial', color1: '#5cc8f2', color2: '#0b5c9a' }),
+    layers: [
+      backdrop(seaBackdrop()),
+      vec(sponge(), 0.73, 0.5, 0.3, { rotation: 4 }),
+      text('ÉPONGE', { x: 0.07, y: 0.32, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.15, weight: 400, color: '#f7e04b', shadow: true }),
+      text('DES MERS', { x: 0.07, y: 0.48, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.11, weight: 400, color: '#ffffff', shadow: true }),
+      text('« Je suis prêt ! »', { x: 0.07, y: 0.65, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.055, weight: 400, color: '#ffffff' }),
+    ],
+  },
+  {
+    key: 'drw-donut',
+    name: 'Mmmh… Donut',
+    category: 'Dessins',
+    badge: 'Animé',
+    background: bg({ kind: 'linear', color1: '#6ec6ff', color2: '#2f8fe0', angle: 90 }),
+    layers: [
+      backdrop(skyClouds()),
+      vec(donut(), 0.71, 0.5, 0.36, { rotation: -8 }),
+      text('MMMH…', { x: 0.07, y: 0.33, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.12, weight: 400, color: '#ffd23f', shadow: true }),
+      text('DONUTS', { x: 0.07, y: 0.5, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.15, weight: 400, color: '#f47fb2', shadow: true }),
+      text('glaçage rose, vermicelles en option', { x: 0.07, y: 0.67, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.042, weight: 400, color: '#ffffff' }),
+    ],
+  },
+  {
+    key: 'drw-portail',
+    name: 'Portail Vert',
+    category: 'Dessins',
+    badge: 'Animé',
+    background: bg({ kind: 'radial', color1: '#16213e', color2: '#05050f' }),
+    layers: [
+      backdrop(starfield(17)),
+      vec(portal(), 0.69, 0.5, 0.42, { sketch: false }),
+      vec(flask(), 0.89, 0.7, 0.11, { rotation: 14 }),
+      text('PORTAIL', { x: 0.07, y: 0.33, align: 'left', fontFamily: 'Bangers', fontSize: 0.16, weight: 400, letterSpacing: 0.01, color: '#9ef01a', shadow: true }),
+      text('VERT', { x: 0.07, y: 0.51, align: 'left', fontFamily: 'Bangers', fontSize: 0.16, weight: 400, letterSpacing: 0.01, color: '#ffffff', shadow: true }),
+      text('aller-retour inter-dimensions', { x: 0.07, y: 0.68, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.042, weight: 400, color: '#c9f75a' }),
+    ],
+  },
+  {
+    key: 'drw-chat',
+    name: 'Chat Lasagne',
+    category: 'Dessins',
+    badge: 'Animé',
+    background: bg({ kind: 'solid', color1: '#fde8c8', grain: 0.15 }),
+    layers: [
+      vec(checks(), 0.5, 0.95, 1.04, { sketch: false, locked: true }),
+      vec(lazyCat(), 0.72, 0.43, 0.38),
+      vec(lasagna(), 0.25, 0.73, 0.3),
+      text('JE DÉTESTE', { x: 0.06, y: 0.17, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.085, weight: 400, color: '#c0392b' }),
+      text('LES LUNDIS', { x: 0.06, y: 0.31, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.085, weight: 400, color: '#1b1712' }),
+    ],
+  },
+  {
+    key: 'drw-van',
+    name: 'Van Mystère',
+    category: 'Dessins',
+    badge: 'Animé',
+    background: bg({ kind: 'linear', color1: '#1b1036', color2: '#4a3a86', angle: 90 }),
+    layers: [
+      backdrop(hauntedNight()),
+      vec(mysteryVan(), 0.6, 0.63, 0.62),
+      text('LE VAN', { x: 0.06, y: 0.15, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.09, weight: 400, color: '#9fe870', shadow: true }),
+      text('MYSTÈRE', { x: 0.06, y: 0.28, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.11, weight: 400, color: '#f59e2b', shadow: true }),
+    ],
+  },
+  {
+    key: 'drw-enfer',
+    name: 'Enfer.exe',
+    category: 'Dessins',
+    badge: 'Jeu',
+    background: bg({ kind: 'radial', color1: '#3a0a0a', color2: '#000000' }),
+    layers: [
+      vec(hellfire(), 0.5, 0.86, 1.04, { sketch: false, locked: true }),
+      vec(pixelDemon(), 0.73, 0.4, 0.3, { sketch: false }),
+      text('ENFER', { x: 0.07, y: 0.28, align: 'left', fontFamily: 'Press Start 2P', fontSize: 0.1, weight: 400, color: '#ff3b30', shadow: true }),
+      text('.EXE', { x: 0.07, y: 0.43, align: 'left', fontFamily: 'Press Start 2P', fontSize: 0.07, weight: 400, color: '#ffc93c', shadow: true }),
+      text('MODE CAUCHEMAR', { x: 0.07, y: 0.56, align: 'left', fontFamily: 'Press Start 2P', fontSize: 0.032, weight: 400, color: '#ffffff' }),
+    ],
+  },
+  {
+    key: 'drw-herisson',
+    name: 'Hérisson Turbo',
+    category: 'Dessins',
+    badge: 'Jeu',
+    background: bg({ kind: 'linear', color1: '#2f7bff', color2: '#bfe8ff', angle: 90 }),
+    layers: [
+      backdrop(checkerHills()),
+      vec(hedgehog(), 0.67, 0.42, 0.36),
+      vec(goldRings(), 0.2, 0.6, 0.26, { sketch: false }),
+      text('TURBO!', { x: 0.06, y: 0.2, align: 'left', fontFamily: 'Bangers', fontSize: 0.16, weight: 400, letterSpacing: 0.01, color: '#ffe14d', shadow: true }),
+      text('plus rapide que ton banquier', { x: 0.06, y: 0.36, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.042, weight: 400, color: '#ffffff' }),
+    ],
+  },
+  {
+    key: 'drw-champi',
+    name: 'Champi 1-UP',
+    category: 'Dessins',
+    badge: 'Jeu',
+    background: bg({ kind: 'solid', color1: '#5c94fc' }),
+    layers: [
+      vec(brickGround(), 0.5, 0.93, 1.02, { sketch: false, locked: true }),
+      vec(skyClouds([[22, 18, 0.5], [142, 16, 0.42]]), 0.5, 0.5, 1, { sketch: false, locked: true }),
+      vec(pixelMushroom(), 0.28, 0.655, 0.22, { sketch: false }),
+      vec(questionBlock(), 0.64, 0.3, 0.12, { sketch: false }),
+      text('?', { x: 0.64, y: 0.31, fontFamily: 'Press Start 2P', fontSize: 0.1, weight: 400, color: '#7a3b00' }),
+      text('1-UP', { x: 0.7, y: 0.6, fontFamily: 'Press Start 2P', fontSize: 0.1, weight: 400, color: '#ffffff', shadow: true }),
+      text('UNE VIE EN PLUS', { x: 0.7, y: 0.73, fontFamily: 'Press Start 2P', fontSize: 0.03, weight: 400, color: '#ffffff' }),
+    ],
+  },
+  {
+    key: 'drw-glouton',
+    name: 'Glouton',
+    category: 'Dessins',
+    badge: 'Jeu',
+    background: bg({ kind: 'solid', color1: '#000000' }),
+    layers: [
+      backdrop(maze()),
+      vec(glouton(), 0.45, 0.5, 0.62, { sketch: false }),
+      vec(ghost('#ff3b3b'), 0.86, 0.5, 0.12, { sketch: false }),
+      text('GLOUTON', { x: 0.5, y: 0.09, fontFamily: 'Press Start 2P', fontSize: 0.055, weight: 400, color: '#ffe600' }),
+      text('HI-SCORE 999990', { x: 0.5, y: 0.92, fontFamily: 'Press Start 2P', fontSize: 0.032, weight: 400, color: '#ffffff' }),
+    ],
+  },
+  {
+    key: 'drw-bloc',
+    name: 'Bloc Creuseur',
+    category: 'Dessins',
+    badge: 'Jeu',
+    background: bg({ kind: 'linear', color1: '#7ec8ff', color2: '#d2f0ff', angle: 90 }),
+    layers: [
+      vec(grassBlock(), 0.27, 0.55, 0.3, { sketch: false }),
+      vec(pickaxe(), 0.68, 0.6, 0.26, { sketch: false }),
+      text('CREUSE.', { x: 0.94, y: 0.18, align: 'right', fontFamily: 'Press Start 2P', fontSize: 0.07, weight: 400, color: '#ffffff', shadow: true }),
+      text('POSE.', { x: 0.94, y: 0.32, align: 'right', fontFamily: 'Press Start 2P', fontSize: 0.07, weight: 400, color: '#3f8f2a', shadow: true }),
+    ],
+  },
+  {
+    key: 'drw-suspect',
+    name: 'Suspect',
+    category: 'Dessins',
+    badge: 'Jeu',
+    background: bg({ kind: 'radial', color1: '#1b1f3b', color2: '#05060f' }),
+    layers: [
+      backdrop(starfield(29)),
+      vec(crewmate(), 0.73, 0.52, 0.26),
+      text('SUS', { x: 0.07, y: 0.3, align: 'left', fontFamily: 'Bangers', fontSize: 0.22, weight: 400, letterSpacing: 0.02, color: '#d7263d', shadow: true }),
+      text("C'ÉTAIT PAS MOI", { x: 0.07, y: 0.53, align: 'left', fontFamily: 'Bangers', fontSize: 0.075, weight: 400, letterSpacing: 0.01, color: '#ffffff' }),
+      text('(…peut-être un peu)', { x: 0.07, y: 0.66, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.045, weight: 400, color: '#9fd9f2' }),
+    ],
+  },
+
+  // ---- Personnages: collectible character cards ------------------------------
+  characterCard({
+    key: 'chr-chevalier',
+    name: 'Sire Boulon',
+    kind: 'CHEVALIER · ACIER',
+    art: knight(),
+    colors: ['#1e3a5f', '#0b1626'],
+    accent: '#ffd166',
+    stats: [['ATK', 82], ['DEF', 96], ['VIT', 41]],
+    stars: 3,
+    rarity: 'Rare',
+  }),
+  characterCard({
+    key: 'chr-mage',
+    name: 'Mage Zéphyr',
+    kind: 'MAGE · COSMOS',
+    art: wizard(),
+    colors: ['#3c1a78', '#12062b'],
+    accent: '#c7a6ff',
+    stats: [['MAG', 98], ['DEF', 38], ['VIT', 64]],
+    stars: 4,
+    rarity: 'Épique',
+  }),
+  characterCard({
+    key: 'chr-ninja',
+    name: 'Kagero',
+    kind: 'NINJA · OMBRE',
+    art: ninja(),
+    colors: ['#2b2b33', '#0a0a0d'],
+    accent: '#ff4d4d',
+    stats: [['ATK', 88], ['DEF', 52], ['VIT', 99]],
+    stars: 4,
+    rarity: 'Épique',
+  }),
+  characterCard({
+    key: 'chr-robot',
+    name: 'R-0B1N',
+    kind: 'ROBOT · ROUILLE',
+    art: robot(),
+    colors: ['#334155', '#0f172a'],
+    accent: '#5ef0ff',
+    stats: [['ATK', 70], ['DEF', 90], ['VIT', 30]],
+    stars: 2,
+    rarity: 'Commun',
+  }),
+  characterCard({
+    key: 'chr-dragon',
+    name: 'Aurum',
+    kind: 'DRAGON · OR',
+    art: dragon(),
+    colors: ['#6b4500', '#1a1000'],
+    accent: '#ffd84d',
+    stats: [['ATK', 99], ['DEF', 88], ['VIT', 77]],
+    stars: 5,
+    rarity: 'Légendaire',
+    finish: 'gold',
+  }),
+  characterCard({
+    key: 'chr-pirate',
+    name: 'Cap. Brume',
+    kind: 'SPECTRE · MER',
+    art: pirateGhost(),
+    colors: ['#0f3b4a', '#041318'],
+    accent: '#8fe3ff',
+    stats: [['ATK', 66], ['DEF', 48], ['VIT', 85]],
+    stars: 3,
+    rarity: 'Rare',
+  }),
+
+  // ---- Comics ---------------------------------------------------------------
+  {
+    key: 'cmx-boom',
+    name: 'BOOM!',
+    category: 'Comics',
+    badge: 'Nouveau',
+    background: bg({ kind: 'solid', color1: '#ffd23f' }),
+    layers: [
+      backdrop(comicsBackdrop('rgba(230,57,70,0.35)')),
+      backdrop(actionLines()),
+      vec(comicsBurst(), 0.5, 0.5, 0.7),
+      text('BOOM!', { y: 0.52, fontFamily: 'Bangers', fontSize: 0.26, weight: 400, letterSpacing: 0.02, color: '#ffffff', shadow: true, rotation: -6 }),
+    ],
+  },
+  {
+    key: 'cmx-heros',
+    name: 'Super Carte',
+    category: 'Comics',
+    badge: 'Nouveau',
+    background: bg({ kind: 'linear', color1: '#4cc9f0', color2: '#4361ee', angle: 135 }),
+    layers: [
+      backdrop(comicsBackdrop('rgba(255,255,255,0.16)')),
+      backdrop(actionLines('rgba(255,255,255,0.22)')),
+      vec(heroShield(), 0.25, 0.53, 0.28),
+      vec(speechBubble(), 0.68, 0.34, 0.54),
+      text("C'EST MOI QUI", { x: 0.69, y: 0.25, fontFamily: 'Bangers', fontSize: 0.075, weight: 400, letterSpacing: 0.01, color: '#1b1712' }),
+      text('PAIE !', { x: 0.69, y: 0.38, fontFamily: 'Bangers', fontSize: 0.1, weight: 400, letterSpacing: 0.01, color: '#e63946' }),
+      text('SUPER CARTE', { x: 0.69, y: 0.79, fontFamily: 'Bangers', fontSize: 0.1, weight: 400, letterSpacing: 0.02, color: '#ffe066', shadow: true }),
+    ],
+  },
+
+  // ---- Synthwave --------------------------------------------------------------
+  {
+    key: 'syn-outrun',
+    name: 'Outrun',
+    category: 'Synthwave',
+    badge: 'Nouveau',
+    background: bg({ kind: 'linear', color1: '#12002b', color2: '#4a0a5e', angle: 90 }),
+    layers: [
+      backdrop(outrun()),
+      text('OUTRUN', { y: 0.86, fontFamily: 'Bangers', fontSize: 0.12, weight: 400, letterSpacing: 0.04, color: '#5ef0ff', shadow: true }),
+    ],
+  },
+  {
+    key: 'syn-palmier',
+    name: 'Nuit Néon',
+    category: 'Synthwave',
+    badge: 'Nouveau',
+    background: bg({ kind: 'linear', color1: '#3a0d6b', color2: '#ff6ec7', angle: 90 }),
+    layers: [
+      backdrop(outrun()),
+      vec(palm(), 0.1, 0.5, 0.22, { sketch: false }),
+      vec(palm(), 0.92, 0.56, 0.2, { sketch: false, rotation: 6 }),
+      text('NUIT NÉON', { y: 0.86, fontFamily: 'Permanent Marker', fontSize: 0.09, weight: 400, color: '#ffe66d', shadow: true }),
+    ],
+  },
+
+  // ---- Old-school tattoo ------------------------------------------------------
+  {
+    key: 'tat-maman',
+    name: 'Cœur Maman',
+    category: 'Tatouage',
+    badge: 'Nouveau',
+    background: bg({ kind: 'solid', color1: '#f3e6c8', grain: 0.3 }),
+    layers: [
+      backdrop(tattooStars()),
+      vec(tattooHeart(), 0.5, 0.5, 0.52),
+      text('MAMAN', { y: 0.55, fontFamily: 'DM Serif Display', fontSize: 0.085, weight: 400, letterSpacing: 0.02, color: '#1b1712' }),
+    ],
+  },
+  {
+    key: 'tat-hirondelle',
+    name: 'Hirondelle',
+    category: 'Tatouage',
+    badge: 'Nouveau',
+    background: bg({ kind: 'solid', color1: '#efe3c8', grain: 0.3 }),
+    layers: [
+      backdrop(tattooStars()),
+      vec(swallow(), 0.52, 0.42, 0.6),
+      text('LIBERTÉ', { y: 0.87, fontFamily: 'DM Serif Display', fontSize: 0.085, weight: 400, letterSpacing: 0.03, color: '#1d3557' }),
+    ],
+  },
+
+  // ---- Japan --------------------------------------------------------------------
+  {
+    key: 'jpn-vague',
+    name: 'Grande Vague',
+    category: 'Japon',
+    badge: 'Nouveau',
+    background: bg({ kind: 'solid', color1: '#f1e4c8', grain: 0.35 }),
+    layers: [
+      backdrop(greatWave()),
+      text('VAGUE', { x: 0.06, y: 0.13, align: 'left', fontFamily: 'DM Serif Display', fontSize: 0.075, weight: 400, letterSpacing: 0.02, color: '#1d3f72' }),
+    ],
+  },
+  {
+    key: 'jpn-koi',
+    name: 'Koï',
+    category: 'Japon',
+    badge: 'Nouveau',
+    background: bg({ kind: 'radial', color1: '#1f6f78', color2: '#0b2f36' }),
+    layers: [
+      backdrop(ripples()),
+      vec(koi(), 0.52, 0.52, 0.6, { rotation: -8 }),
+      text('KOÏ', { x: 0.07, y: 0.85, align: 'left', fontFamily: 'DM Serif Display', fontSize: 0.08, weight: 400, letterSpacing: 0.03, color: '#ffe9d6' }),
+    ],
+  },
+
+  // ---- Space ------------------------------------------------------------------
+  {
+    key: 'spc-planete',
+    name: 'Planète Anneau',
+    category: 'Espace',
+    badge: 'Nouveau',
+    background: bg({ kind: 'radial', color1: '#1b2a4a', color2: '#03050c' }),
+    layers: [
+      backdrop(starfield(51)),
+      vec(ringedPlanet(), 0.63, 0.52, 0.6, { rotation: -12 }),
+      text('ORBITE', { x: 0.06, y: 0.14, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.075, weight: 700, letterSpacing: 0.03, color: '#e9c46a' }),
+    ],
+  },
+  {
+    key: 'spc-fusee',
+    name: 'Décollage',
+    category: 'Espace',
+    badge: 'Nouveau',
+    background: bg({ kind: 'linear', color1: '#0b1d51', color2: '#311b92', angle: 135 }),
+    layers: [
+      backdrop(starfield(63)),
+      vec(rocket(), 0.74, 0.5, 0.2, { rotation: 28 }),
+      text('DÉCOLLAGE', { x: 0.06, y: 0.3, align: 'left', fontFamily: 'Bangers', fontSize: 0.13, weight: 400, letterSpacing: 0.01, color: '#ffffff', shadow: true }),
+      text('IMMÉDIAT', { x: 0.06, y: 0.47, align: 'left', fontFamily: 'Bangers', fontSize: 0.13, weight: 400, letterSpacing: 0.01, color: '#ffe066', shadow: true }),
+      text('3… 2… 1…', { x: 0.06, y: 0.65, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.055, weight: 400, color: '#4dabf7' }),
+    ],
+  },
+
+  // ---- Parody ID (clearly fictional) ---------------------------------------------
+  {
+    key: 'par-permis',
+    name: 'Permis de Nager',
+    category: 'Parodie',
+    badge: 'Nouveau',
+    background: bg({ kind: 'linear', color1: '#eef6ff', color2: '#cfe4ff', angle: 135, finish: 'gloss' }),
+    layers: [
+      backdrop(idPattern()),
+      text('PERMIS DE NAGER', { x: 0.05, y: 0.11, align: 'left', fontFamily: 'Oswald', fontSize: 0.085, weight: 700, letterSpacing: 0.01, color: '#ffffff' }),
+      text('FOND MARIN', { x: 0.95, y: 0.11, align: 'right', fontFamily: 'Oswald', fontSize: 0.05, weight: 600, color: '#bfdbfe' }),
+      shape({ shape: 'roundRect', x: 0.19, y: 0.6, width: 0.26, height: 0.6, fill: '#ffffff', stroke: '#1d4ed8', strokeWidth: 0.004, cornerRadius: 0.015 }),
+      vec(sponge(), 0.19, 0.6, 0.21),
+      text('NOM : L’ÉPONGE', { x: 0.37, y: 0.33, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.045, weight: 700, color: '#0f172a' }),
+      text('ADRESSE : 124 rue de l’Ananas', { x: 0.37, y: 0.44, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.04, weight: 500, color: '#0f172a' }),
+      text('CATÉGORIE : pêche aux méduses', { x: 0.37, y: 0.54, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.04, weight: 500, color: '#0f172a' }),
+      text('VALABLE : pour toujours', { x: 0.37, y: 0.64, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.04, weight: 500, color: '#0f172a' }),
+      text('L’Éponge', { x: 0.37, y: 0.82, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.075, weight: 400, color: '#1d4ed8', rotation: -4 }),
+    ],
+  },
 ]
 
 export const NEW_FILTER = 'Nouveautés'
 
+const FEATURED = ['Dessins', 'Personnages']
+const ALL_CATEGORIES = Array.from(new Set(TEMPLATES.map((t) => t.category)))
+
 export const CATEGORIES: string[] = [
   'Tous',
   NEW_FILTER,
-  ...Array.from(new Set(TEMPLATES.map((t) => t.category))),
+  ...FEATURED.filter((c) => ALL_CATEGORIES.includes(c)),
+  ...ALL_CATEGORIES.filter((c) => !FEATURED.includes(c)),
 ]
 
 export function templateToProject(t: Template): CardProject {

@@ -95,6 +95,10 @@ export const FONTS = [
   'Oswald',
   'Space Grotesk',
   'DM Serif Display',
+  'Bangers',
+  'Luckiest Guy',
+  'Permanent Marker',
+  'Press Start 2P',
   'Georgia',
   'Courier New',
 ]

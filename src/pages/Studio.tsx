@@ -24,7 +24,7 @@ import { ColorField, Sheet, Slider, useToast } from '../components/ui'
 import { useSettings, previewWidth } from '../theme/settings'
 import { saveProject } from '../db/storage'
 import { exportProject } from '../studio/render'
-import { fileToDownscaledImage, pickImage, shareOrDownload, dataUrlToBlob } from '../studio/image'
+import { fileToDownscaledImage, pickImage, shareOrDownload, dataUrlToBlob, safeFileName } from '../studio/image'
 import { createDrawLayer, createImageLayer, createShapeLayer, createTextLayer, FONTS } from '../studio/layers'
 import type {
   Background,
@@ -528,6 +528,7 @@ function layerLabel(l: Layer): string {
   if (l.type === 'text') return `“${l.text.slice(0, 16)}”`
   if (l.type === 'image') return 'Image'
   if (l.type === 'draw') return `Dessin · ${l.strokes.length} trait(s)`
+  if (l.type === 'vector') return 'Illustration'
   return `Forme · ${l.shape}`
 }
 
@@ -798,7 +799,7 @@ function ExportPanel({
       const blob = dataUrlToBlob(dataUrl)
       const ext = format === 'png' ? 'png' : 'jpg'
       const side = which === 'front' ? 'recto' : 'verso'
-      const name = `${project.name.replace(/[^\w-]+/g, '_')}_${side}_${res}.${ext}`
+      const name = `${safeFileName(project.name)}_${side}_${res}.${ext}`
       const result = await shareOrDownload(blob, name)
       toast(result === 'shared' ? 'Partagé' : 'Image enregistrée')
     } catch (e) {

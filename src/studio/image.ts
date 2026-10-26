@@ -68,6 +68,17 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([arr], { type: mime })
 }
 
+// File-system friendly name that keeps letters readable ("Éponge" -> "Eponge").
+export function safeFileName(name: string): string {
+  return (
+    name
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^\w-]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'carte'
+  )
+}
+
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

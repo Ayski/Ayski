@@ -7,6 +7,7 @@ import type {
   Layer,
   ShapeLayer,
   TextLayer,
+  VectorLayer,
 } from '../types'
 import { readFace } from '../types'
 
@@ -33,10 +34,26 @@ export function preloadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
+// Canvas text does not trigger web-font downloads by itself, so request every
+// face used by the project's text layers before drawing.
+const fontLoads = new Map<string, Promise<unknown>>()
+function loadFont(family: string, weight: number, italic: boolean): Promise<unknown> {
+  const spec = `${italic ? 'italic ' : ''}${weight} 32px "${family}"`
+  let p = fontLoads.get(spec)
+  if (!p) {
+    p = document.fonts?.load ? document.fonts.load(spec).catch(() => undefined) : Promise.resolve()
+    fontLoads.set(spec, p)
+  }
+  return p
+}
+
 export async function preloadProject(project: CardProject): Promise<void> {
   const layers = [...project.layers, ...(project.back?.layers ?? [])]
   const srcs = layers.filter((l): l is ImageLayer => l.type === 'image').map((l) => l.src)
-  await Promise.all(srcs.map((s) => preloadImage(s).catch(() => undefined)))
+  const fonts = layers
+    .filter((l): l is TextLayer => l.type === 'text')
+    .map((l) => loadFont(l.fontFamily, l.weight, l.italic))
+  await Promise.all([...srcs.map((s) => preloadImage(s).catch(() => undefined)), ...fonts])
 }
 
 // ---- Helpers ----------------------------------------------------------------
@@ -321,7 +338,8 @@ function drawTextLayer(ctx: CanvasRenderingContext2D, l: TextLayer, w: number, h
   ctx.rotate((l.rotation * Math.PI) / 180)
   ctx.globalAlpha = l.opacity
   const style = l.italic ? 'italic ' : ''
-  ctx.font = `${style}${l.weight} ${size}px ${l.fontFamily}`
+  // Quote the family: names such as "Press Start 2P" are not valid bare identifiers.
+  ctx.font = `${style}${l.weight} ${size}px "${l.fontFamily}", sans-serif`
   ctx.fillStyle = l.color
   ctx.textAlign = l.align
   ctx.textBaseline = 'middle'
@@ -388,11 +406,58 @@ function drawDrawLayer(ctx: CanvasRenderingContext2D, l: DrawLayer, w: number, h
   ctx.restore()
 }
 
+const pathCache = new Map<string, Path2D>()
+function toPath(d: string): Path2D {
+  let p = pathCache.get(d)
+  if (!p) {
+    p = new Path2D(d)
+    pathCache.set(d, p)
+  }
+  return p
+}
+
+function drawVectorLayer(ctx: CanvasRenderingContext2D, l: VectorLayer, w: number, h: number) {
+  const boxW = l.width * w * l.scale
+  const k = boxW / l.viewW
+  const boxH = l.viewH * k
+  ctx.save()
+  ctx.translate(l.x * w, l.y * h)
+  ctx.rotate((l.rotation * Math.PI) / 180)
+  ctx.translate(-boxW / 2, -boxH / 2)
+  ctx.scale(k, k)
+  ctx.globalAlpha = l.opacity
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  for (const p of l.paths) {
+    const path = toPath(p.d)
+    if (p.fill) {
+      ctx.fillStyle = p.fill
+      ctx.fill(path, p.rule ?? 'nonzero')
+    }
+    if (p.stroke) {
+      ctx.strokeStyle = p.stroke
+      ctx.lineWidth = p.sw ?? 3
+      ctx.stroke(path)
+      if (l.sketch && (p.sw ?? 3) >= 2) {
+        // second, slightly offset pass gives a hand-inked look
+        ctx.save()
+        ctx.globalAlpha = l.opacity * 0.45
+        ctx.translate(0.9, -0.7)
+        ctx.lineWidth = (p.sw ?? 3) * 0.55
+        ctx.stroke(path)
+        ctx.restore()
+      }
+    }
+  }
+  ctx.restore()
+}
+
 function drawLayer(ctx: CanvasRenderingContext2D, l: Layer, w: number, h: number) {
   if (!l.visible) return
   if (l.type === 'image') drawImageLayer(ctx, l, w, h)
   else if (l.type === 'shape') drawShapeLayer(ctx, l, w, h)
   else if (l.type === 'draw') drawDrawLayer(ctx, l, w, h)
+  else if (l.type === 'vector') drawVectorLayer(ctx, l, w, h)
   else drawTextLayer(ctx, l, w, h)
 }
 

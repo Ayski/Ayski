@@ -115,18 +115,25 @@ export default function Home({ onCreate, onOpenProject, goExplore, goGallery, go
         </>
       )}
 
-      <div className="section-head">
-        <h2>Nouveautés · Signature</h2>
-        <button className="link" onClick={goExplore}>Tout voir</button>
-      </div>
-      <div className="hscroll">
-        {TEMPLATES.filter((t) => t.badge).map((t) => (
-          <button key={t.key} className="tpl" onClick={() => onCreate(templateToProject(t))}>
-            <div className="tpl-thumb"><CardPreview project={templateToProject(t)} width={360} /></div>
-            <div className="tpl-meta"><div className="tpl-name">{t.name}</div><div className="tpl-cat">{t.category}</div></div>
-          </button>
-        ))}
-      </div>
+      {[
+        { title: 'Dessins parodiques', filter: (c: string) => c === 'Dessins' },
+        { title: 'Cartes de personnages', filter: (c: string) => c === 'Personnages' },
+      ].map((s) => (
+        <div key={s.title}>
+          <div className="section-head">
+            <h2>{s.title}</h2>
+            <button className="link" onClick={goExplore}>Tout voir</button>
+          </div>
+          <div className="hscroll">
+            {TEMPLATES.filter((t) => s.filter(t.category)).map((t) => (
+              <button key={t.key} className="tpl" onClick={() => onCreate(templateToProject(t))}>
+                <div className="tpl-thumb"><CardPreview project={templateToProject(t)} width={360} /></div>
+                <div className="tpl-meta"><div className="tpl-name">{t.name}</div><div className="tpl-cat">{t.badge ?? t.category}</div></div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
 
       <div className="section-head">
         <h2>Collections recommandées</h2>
