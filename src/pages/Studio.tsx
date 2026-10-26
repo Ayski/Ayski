@@ -690,7 +690,38 @@ function TextControls({ layer, onUpdate }: { layer: TextLayer; onUpdate: (p: Par
         <button className={`chip ${layer.shadow ? 'active' : ''}`} onClick={() => onUpdate({ shadow: !layer.shadow })}>
           Ombre
         </button>
+        <button
+          className={`chip ${layer.outline ? 'active' : ''}`}
+          onClick={() =>
+            onUpdate(layer.outline ? { outline: undefined } : { outline: '#1b1712', outlineWidth: layer.outlineWidth || 0.1 })
+          }
+        >
+          Contour
+        </button>
+        <button
+          className={`chip ${layer.color2 ? 'active' : ''}`}
+          onClick={() => onUpdate({ color2: layer.color2 ? undefined : '#D9B45B' })}
+        >
+          Dégradé
+        </button>
       </div>
+      {layer.outline && (
+        <>
+          <ColorField label="Couleur du contour" value={layer.outline} onChange={(c) => onUpdate({ outline: c })} />
+          <Slider
+            label="Épaisseur du contour"
+            value={layer.outlineWidth ?? 0.1}
+            min={0.02}
+            max={0.25}
+            step={0.01}
+            display={(v) => `${Math.round(v * 100)}`}
+            onChange={(v) => onUpdate({ outlineWidth: v })}
+          />
+        </>
+      )}
+      {layer.color2 && (
+        <ColorField label="Couleur du bas (dégradé)" value={layer.color2} onChange={(c) => onUpdate({ color2: c })} />
+      )}
     </>
   )
 }

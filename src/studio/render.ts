@@ -6,6 +6,7 @@ import type {
   ImageLayer,
   Layer,
   ShapeLayer,
+  Paint,
   TextLayer,
   VectorLayer,
 } from '../types'
@@ -340,31 +341,58 @@ function drawTextLayer(ctx: CanvasRenderingContext2D, l: TextLayer, w: number, h
   const style = l.italic ? 'italic ' : ''
   // Quote the family: names such as "Press Start 2P" are not valid bare identifiers.
   ctx.font = `${style}${l.weight} ${size}px "${l.fontFamily}", sans-serif`
-  ctx.fillStyle = l.color
   ctx.textAlign = l.align
   ctx.textBaseline = 'middle'
-  if (l.shadow) {
-    ctx.shadowColor = 'rgba(0,0,0,0.5)'
-    ctx.shadowBlur = size * 0.14
-    ctx.shadowOffsetY = size * 0.06
-  }
+  ctx.lineJoin = 'round'
+  ctx.miterLimit = 2
+
+  // Glyph placement (manual letter spacing keeps output identical everywhere).
   const spacing = l.letterSpacing * w
+  const runs: [string, number][] = []
   if (spacing === 0) {
-    ctx.fillText(l.text, 0, 0)
+    runs.push([l.text, 0])
   } else {
-    // manual letter spacing for cross-browser fidelity
     const chars = [...l.text]
     const widths = chars.map((c) => ctx.measureText(c).width + spacing)
     const total = widths.reduce((a, b) => a + b, 0) - spacing
     let cursor = l.align === 'center' ? -total / 2 : l.align === 'right' ? -total : 0
-    const prevAlign = ctx.textAlign
-    ctx.textAlign = 'left'
     chars.forEach((c, i) => {
-      ctx.fillText(c, cursor, 0)
+      runs.push([c, cursor])
       cursor += widths[i]
     })
-    ctx.textAlign = prevAlign
+    ctx.textAlign = 'left'
   }
+
+  const shadowOn = () => {
+    if (!l.shadow) return
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'
+    ctx.shadowBlur = size * 0.14
+    ctx.shadowOffsetY = size * 0.06
+  }
+  const shadowOff = () => {
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetY = 0
+  }
+
+  // Outline first (it carries the shadow), then the fill on top without shadow.
+  const ow = (l.outlineWidth ?? 0) * size
+  shadowOn()
+  if (l.outline && ow > 0) {
+    ctx.strokeStyle = l.outline
+    ctx.lineWidth = ow * 2
+    for (const [t, x] of runs) ctx.strokeText(t, x, 0)
+    shadowOff()
+  }
+  if (l.color2) {
+    const g = ctx.createLinearGradient(0, -size * 0.45, 0, size * 0.45)
+    g.addColorStop(0, l.color)
+    g.addColorStop(1, l.color2)
+    ctx.fillStyle = g
+  } else {
+    ctx.fillStyle = l.color
+  }
+  for (const [t, x] of runs) ctx.fillText(t, x, 0)
   ctx.restore()
 }
 
@@ -416,6 +444,46 @@ function toPath(d: string): Path2D {
   return p
 }
 
+// Resolve a paint (flat colour or gradient) in the current, view-scaled space.
+function paint(ctx: CanvasRenderingContext2D, p: Paint): string | CanvasGradient {
+  if (typeof p === 'string') return p
+  const g =
+    p.kind === 'linear'
+      ? ctx.createLinearGradient(p.x0, p.y0, p.x1, p.y1)
+      : ctx.createRadialGradient(p.fx ?? p.cx, p.fy ?? p.cy, 0, p.cx, p.cy, p.r)
+  for (const [o, c] of p.stops) g.addColorStop(o, c)
+  return g
+}
+
+function paintPaths(ctx: CanvasRenderingContext2D, l: VectorLayer) {
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  const base = ctx.globalAlpha
+  for (const p of l.paths) {
+    const path = toPath(p.d)
+    ctx.globalAlpha = base * (p.alpha ?? 1)
+    if (p.fill) {
+      ctx.fillStyle = paint(ctx, p.fill)
+      ctx.fill(path, p.rule ?? 'nonzero')
+    }
+    if (p.stroke) {
+      ctx.strokeStyle = paint(ctx, p.stroke)
+      ctx.lineWidth = p.sw ?? 3
+      ctx.stroke(path)
+      if (l.sketch && (p.sw ?? 3) >= 2) {
+        // second, slightly offset pass gives a hand-inked look
+        ctx.save()
+        ctx.globalAlpha = base * (p.alpha ?? 1) * 0.45
+        ctx.translate(0.9, -0.7)
+        ctx.lineWidth = (p.sw ?? 3) * 0.55
+        ctx.stroke(path)
+        ctx.restore()
+      }
+    }
+  }
+  ctx.globalAlpha = base
+}
+
 function drawVectorLayer(ctx: CanvasRenderingContext2D, l: VectorLayer, w: number, h: number) {
   const boxW = l.width * w * l.scale
   const k = boxW / l.viewW
@@ -423,31 +491,28 @@ function drawVectorLayer(ctx: CanvasRenderingContext2D, l: VectorLayer, w: numbe
   ctx.save()
   ctx.translate(l.x * w, l.y * h)
   ctx.rotate((l.rotation * Math.PI) / 180)
-  ctx.translate(-boxW / 2, -boxH / 2)
-  ctx.scale(k, k)
   ctx.globalAlpha = l.opacity
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  for (const p of l.paths) {
-    const path = toPath(p.d)
-    if (p.fill) {
-      ctx.fillStyle = p.fill
-      ctx.fill(path, p.rule ?? 'nonzero')
-    }
-    if (p.stroke) {
-      ctx.strokeStyle = p.stroke
-      ctx.lineWidth = p.sw ?? 3
-      ctx.stroke(path)
-      if (l.sketch && (p.sw ?? 3) >= 2) {
-        // second, slightly offset pass gives a hand-inked look
-        ctx.save()
-        ctx.globalAlpha = l.opacity * 0.45
-        ctx.translate(0.9, -0.7)
-        ctx.lineWidth = (p.sw ?? 3) * 0.55
-        ctx.stroke(path)
-        ctx.restore()
-      }
-    }
+  if (l.shadow && boxW > 1) {
+    // Render once off-screen, then stamp it with a single soft shadow so
+    // overlapping shapes do not stack darker shadows.
+    const s = l.shadow
+    const pad = Math.ceil((s.blur * 2 + Math.max(Math.abs(s.dx), Math.abs(s.dy))) * k) + 2
+    const off = document.createElement('canvas')
+    off.width = Math.ceil(boxW + pad * 2)
+    off.height = Math.ceil(boxH + pad * 2)
+    const o = off.getContext('2d')!
+    o.translate(pad, pad)
+    o.scale(k, k)
+    paintPaths(o, l)
+    ctx.shadowColor = s.color
+    ctx.shadowBlur = s.blur * k
+    ctx.shadowOffsetX = s.dx * k
+    ctx.shadowOffsetY = s.dy * k
+    ctx.drawImage(off, -boxW / 2 - pad, -boxH / 2 - pad)
+  } else {
+    ctx.translate(-boxW / 2, -boxH / 2)
+    ctx.scale(k, k)
+    paintPaths(ctx, l)
   }
   ctx.restore()
 }

@@ -1,4 +1,4 @@
-import type { VectorPath } from '../../types'
+import type { LinearPaint, RadialPaint, VectorPath } from '../../types'
 
 // Drawing kit: tiny helpers that produce SVG path strings for hand-made
 // illustrations. Everything is authored in "view units" and scaled at render.
@@ -9,6 +9,50 @@ export interface Art {
   viewW: number
   viewH: number
   paths: VectorPath[]
+}
+
+// ---- paints & colour helpers --------------------------------------------------
+// Linear gradient from (x0,y0) to (x1,y1); stops as alternating offset/colour.
+export function lin(x0: number, y0: number, x1: number, y1: number, ...stops: (number | string)[]): LinearPaint {
+  return { kind: 'linear', x0, y0, x1, y1, stops: pairs(stops) }
+}
+
+// Radial gradient; the focal point defaults to the upper-left for a lit-sphere look.
+export function rad(cx: number, cy: number, r: number, ...stops: (number | string)[]): RadialPaint {
+  return { kind: 'radial', cx, cy, r, stops: pairs(stops) }
+}
+
+export function radLit(cx: number, cy: number, r: number, ...stops: (number | string)[]): RadialPaint {
+  return { kind: 'radial', cx, cy, r, fx: cx - r * 0.35, fy: cy - r * 0.4, stops: pairs(stops) }
+}
+
+function pairs(stops: (number | string)[]): [number, string][] {
+  const out: [number, string][] = []
+  for (let i = 0; i < stops.length; i += 2) out.push([stops[i] as number, stops[i + 1] as string])
+  return out
+}
+
+// Lighten (amt > 0) or darken (amt < 0) a #rrggbb colour; amt in [-1, 1].
+export function shade(hex: string, amt: number): string {
+  const v = hex.replace('#', '')
+  const c = [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16))
+  const out = c.map((x) => Math.round(amt >= 0 ? x + (255 - x) * amt : x * (1 + amt)))
+  return '#' + out.map((x) => Math.max(0, Math.min(255, x)).toString(16).padStart(2, '0')).join('')
+}
+
+// Soft contact shadow: stacked translucent ellipses fake a blurred edge
+// (works everywhere, unlike canvas filters).
+export function softShadow(cx: number, cy: number, rx: number, ry: number, alpha = 0.28, color = '0,0,0'): VectorPath[] {
+  const steps = 6
+  return Array.from({ length: steps }, (_, i) => {
+    const k = 1 - i / (steps + 1)
+    return { d: ell(cx, cy, rx * (0.55 + 0.45 * k), ry * (0.55 + 0.45 * k)), fill: `rgba(${color},${(alpha / steps).toFixed(3)})` }
+  })
+}
+
+// Curved white gloss highlight along the upper-left of a shape.
+export function gloss(d: string, width = 4, alpha = 0.7): VectorPath {
+  return { d, stroke: `rgba(255,255,255,${alpha})`, sw: width }
 }
 
 const n = (v: number) => Math.round(v * 100) / 100

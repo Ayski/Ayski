@@ -53,6 +53,9 @@ export interface TextLayer extends BaseLayer {
   weight: number // 400..800
   italic: boolean
   shadow: boolean
+  outline?: string // outline colour (poster / comic titles)
+  outlineWidth?: number // fraction of the font size
+  color2?: string // bottom colour of a vertical gradient fill
 }
 
 export type ShapeKind = 'rect' | 'roundRect' | 'circle' | 'line' | 'triangle'
@@ -84,12 +87,42 @@ export interface DrawLayer extends BaseLayer {
 // A vector illustration made of SVG path strings (rendered with Path2D).
 // `width` is the illustration width as a fraction of the card width; paths are
 // authored in a viewW × viewH box and scaled uniformly.
+// Gradient paints are expressed in the illustration's view units.
+export interface LinearPaint {
+  kind: 'linear'
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+  stops: [number, string][]
+}
+
+export interface RadialPaint {
+  kind: 'radial'
+  cx: number
+  cy: number
+  r: number
+  fx?: number // focal point (defaults to centre)
+  fy?: number
+  stops: [number, string][]
+}
+
+export type Paint = string | LinearPaint | RadialPaint
+
 export interface VectorPath {
   d: string
-  fill?: string
-  stroke?: string
+  fill?: Paint
+  stroke?: Paint
   sw?: number // stroke width in view units
   rule?: 'nonzero' | 'evenodd'
+  alpha?: number // per-path opacity
+}
+
+export interface VectorShadow {
+  color: string
+  blur: number // view units
+  dx: number
+  dy: number
 }
 
 export interface VectorLayer extends BaseLayer {
@@ -99,6 +132,7 @@ export interface VectorLayer extends BaseLayer {
   width: number
   paths: VectorPath[]
   sketch?: boolean // hand-drawn double ink line
+  shadow?: VectorShadow // soft drop shadow under the whole illustration
 }
 
 export type Layer = ImageLayer | TextLayer | ShapeLayer | DrawLayer | VectorLayer
