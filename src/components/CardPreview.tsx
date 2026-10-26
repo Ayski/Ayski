@@ -20,6 +20,26 @@ interface Props {
   lazy?: boolean // only render once scrolled near the viewport
 }
 
+// ImageBitmaps rather than spare canvases: iOS Safari caps total canvas memory.
+const bitmapCache = new WeakMap<CardProject, Map<string, ImageBitmap>>()
+
+function storeBitmap(project: CardProject, key: string, src: HTMLCanvasElement) {
+  if (typeof createImageBitmap === 'undefined') return
+  createImageBitmap(src)
+    .then((bmp) => {
+      let byKey = bitmapCache.get(project)
+      if (!byKey) bitmapCache.set(project, (byKey = new Map()))
+      byKey.set(key, bmp)
+    })
+    .catch(() => undefined)
+}
+
+// Image layers and web fonts load asynchronously; everything else paints at once.
+function needsAssets(project: CardProject): boolean {
+  const layers = [...project.layers, ...(project.back?.layers ?? [])]
+  return layers.some((l) => l.type === 'image' || l.type === 'text')
+}
+
 function hitTest(project: CardProject, faceKey: FaceKey, nx: number, ny: number): Layer | null {
   const layers = readFace(project, faceKey).layers
   for (let i = layers.length - 1; i >= 0; i--) {
@@ -97,17 +117,37 @@ export default function CardPreview({
       overlayRef.current.height = h
     }
     const ctx = canvas.getContext('2d')!
-    const draw = () =>
-      !cancelled && renderCard(ctx, project, { width, showGrid, radius: h * 0.08, face: faceKey })
+    // Lazy catalogue thumbnails are cached per project object, so scrolling back
+    // or switching tabs does not repaint heavy illustrations. Live previews
+    // (Studio, 3D view) are never cached: each edit is a new project object.
+    const cacheable = lazy && !interactive && !drawMode && !showGrid
+    const key = `${width}|${faceKey}`
+    const hit = cacheable ? bitmapCache.get(project)?.get(key) : undefined
+    if (hit) {
+      ctx.clearRect(0, 0, width, h)
+      ctx.drawImage(hit, 0, 0)
+      return
+    }
+    const draw = () => {
+      if (cancelled) return
+      renderCard(ctx, project, { width, showGrid, radius: h * 0.08, face: faceKey })
+      if (cacheable) storeBitmap(project, key, canvas)
+    }
+    if (!needsAssets(project)) {
+      // Pure vector/shape art: one synchronous paint is final.
+      draw()
+      return
+    }
     preloadProject(project).then(() => {
       if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw)
       else draw()
     })
-    draw()
+    // Quick first paint while images and fonts load (not cached).
+    renderCard(ctx, project, { width, showGrid, radius: h * 0.08, face: faceKey })
     return () => {
       cancelled = true
     }
-  }, [project, width, showGrid, faceKey, visible])
+  }, [project, width, showGrid, faceKey, visible, interactive, drawMode, lazy])
 
   function toNorm(e: React.PointerEvent) {
     const rect = canvasRef.current!.getBoundingClientRect()
