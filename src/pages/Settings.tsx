@@ -31,7 +31,7 @@ export default function Settings() {
     try {
       const text = await file.text()
       const n = await importBackup(text)
-      toast(`${n} projet(s) importé(s)`)
+      toast(n > 1 ? `${n} projets importés` : `${n} projet importé`)
       refresh()
     } catch (e) {
       toast((e as Error).message)

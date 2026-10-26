@@ -53,7 +53,7 @@ export default function Explore({ onOpen }: { onOpen: (p: CardProject) => void }
       </div>
 
       <div className="row-between mb">
-        <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>{list.length} résultat(s)</span>
+        <span className="tile-sub" style={{ marginTop: 0 }}>{list.length} résultat{list.length > 1 ? 's' : ''}</span>
         <div className="wrap">
           <button className={`chip ${sort === 'category' ? 'active' : ''}`} onClick={() => setSort('category')}>Par thème</button>
           <button className={`chip ${sort === 'name' ? 'active' : ''}`} onClick={() => setSort('name')}>A–Z</button>

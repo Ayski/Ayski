@@ -72,7 +72,7 @@ export default function MyCreations({ onOpen }: { onOpen: (p: CardProject) => vo
     <div className="page">
       <div className="eyebrow">Galerie personnelle</div>
       <h1 className="page-title">Mes créations</h1>
-      <p className="page-sub">{projects.length} projet(s) enregistré(s) localement sur cet appareil.</p>
+      <p className="page-sub">{projects.length === 0 ? 'Vos designs sont enregistrés uniquement sur cet appareil.' : `${projects.length} projet${projects.length > 1 ? 's enregistrés' : ' enregistré'} sur cet appareil.`}</p>
 
       <div className="row mb" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 12, padding: '0 12px' }}>
         <IconSearch width={18} style={{ color: 'var(--text-dim)' }} />

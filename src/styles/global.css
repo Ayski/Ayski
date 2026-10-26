@@ -1,4 +1,23 @@
+/* ---- Typefaces (bundled: work offline in the installed app) ----
+   Fraunces (soft optical serif) for display titles, Plus Jakarta Sans for UI. */
+@font-face {
+  font-family: 'Fraunces';
+  src: url('../assets/fonts/fraunces-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Jakarta';
+  src: url('../assets/fonts/jakarta-latin.woff2') format('woff2');
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
+  --font-ui: 'Jakarta', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Fraunces', 'Jakarta', Georgia, serif;
   --black: #08090d;
   --anthracite: #171923;
   --graphite: #22252f;
@@ -51,7 +70,11 @@ body,
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: -0.003em;
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
   background: var(--bg);
   color: var(--text);
   overscroll-behavior-y: none;
@@ -85,6 +108,10 @@ h3,
 h4,
 p {
   margin: 0;
+}
+h3 {
+  font-weight: 650;
+  letter-spacing: -0.012em;
 }
 
 .app {
@@ -124,25 +151,60 @@ p {
 }
 
 .page-title {
-  font-size: 30px;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: 42px;
+  font-weight: 450;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100, 'WONK' 0;
   letter-spacing: -0.02em;
-  margin-bottom: 4px;
+  line-height: 1.04;
+  margin-bottom: 10px;
+  background: linear-gradient(180deg, var(--text) 30%, color-mix(in srgb, var(--text) 62%, var(--accent)) 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .page-sub {
   color: var(--text-dim);
-  font-size: 14px;
-  margin-bottom: 20px;
+  font-size: 15.5px;
+  line-height: 1.5;
+  letter-spacing: -0.004em;
+  max-width: 34ch;
+  margin-bottom: 24px;
 }
 
 .eyebrow {
-  font-size: 11px;
-  letter-spacing: 0.18em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10.5px;
+  letter-spacing: 0.26em;
   text-transform: uppercase;
   color: var(--accent);
-  font-weight: 600;
-  margin-bottom: 8px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.eyebrow::before {
+  content: '';
+  width: 18px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.8;
+}
+
+/* Text pairs inside panels and tiles */
+.tile-title {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.014em;
+  margin-top: 12px;
+}
+.tile-sub {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
 }
 
 /* ---- Bottom navigation ---- */
@@ -169,9 +231,9 @@ p {
   justify-content: center;
   gap: 4px;
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.005em;
   transition: color 0.2s;
   padding-top: 8px;
 }
@@ -208,8 +270,9 @@ p {
   gap: 8px;
   padding: 14px 20px;
   border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: 650;
+  font-size: 16px;
+  letter-spacing: -0.012em;
   transition: transform 0.12s, opacity 0.2s, background 0.2s;
 }
 .btn:active {
@@ -218,7 +281,9 @@ p {
 .btn-primary {
   background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000));
   color: #0b0b0e;
-  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 10px 28px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .btn-ghost {
   background: var(--surface-2);
@@ -413,12 +478,18 @@ p {
   padding: 10px 12px;
 }
 .tpl-name {
-  font-weight: 600;
+  font-weight: 650;
   font-size: 14px;
+  letter-spacing: -0.012em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tpl-cat {
-  font-size: 11px;
+  font-size: 11.5px;
+  font-weight: 500;
   color: var(--text-dim);
+  margin-top: 1px;
 }
 .tpl-badge {
   display: inline-block;
@@ -449,8 +520,9 @@ p {
   border-radius: 999px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
   color: var(--text-dim);
   white-space: nowrap;
 }
@@ -467,7 +539,7 @@ p {
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text);
-  font-size: 15px;
+  font-size: 16px;
 }
 .input:focus {
   outline: none;
@@ -579,7 +651,7 @@ input[type='color'] {
 .studio-top {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: calc(var(--safe-top) + 10px) 12px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
@@ -819,7 +891,7 @@ input[type='color'] {
 }
 .hgroup h3 {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 650;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -831,17 +903,21 @@ input[type='color'] {
 .link {
   color: var(--accent);
   text-decoration: none;
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
 }
 .section-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin: 22px 0 12px;
+  margin: 30px 0 14px;
 }
 .section-head h2 {
-  font-size: 18px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 500;
+  font-variation-settings: 'opsz' 48, 'SOFT' 100, 'WONK' 0;
+  letter-spacing: -0.015em;
 }
 .hscroll {
   display: flex;
@@ -856,4 +932,42 @@ input[type='color'] {
 }
 .hscroll .tpl {
   flex: 0 0 150px;
+}
+
+.hero-caption {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 420;
+  font-variation-settings: 'opsz' 36, 'SOFT' 100, 'WONK' 0;
+  letter-spacing: -0.01em;
+  color: var(--text-dim);
+}
+
+.sheet-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 480;
+  font-variation-settings: 'opsz' 72, 'SOFT' 100, 'WONK' 0;
+  letter-spacing: -0.015em;
+}
+
+/* Two buttons side by side: keep labels on one line */
+.grid-2 > .btn {
+  font-size: 14.5px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.studio-name {
+  min-width: 0;
+  padding: 0 2px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 16.5px;
+  font-weight: 480;
+  font-variation-settings: 'opsz' 36, 'SOFT' 100, 'WONK' 0;
+  letter-spacing: -0.01em;
+}
+.studio-top .spacer {
+  flex: 0 0 2px;
 }

@@ -136,7 +136,7 @@ export function Sheet({
         <div className="sheet-handle" />
         {title && (
           <div className="row-between mb">
-            <h3 style={{ fontSize: 18, fontWeight: 700 }}>{title}</h3>
+            <h3 className="sheet-title">{title}</h3>
             <button className="icon-btn" onClick={onClose}>
               <IconClose />
             </button>

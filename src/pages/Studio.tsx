@@ -323,7 +323,7 @@ export default function Studio({
           <IconRedo />
         </button>
         <div className="spacer" />
-        <button className="layer-name" style={{ textAlign: 'center', fontWeight: 600 }} onClick={() => setNameEdit(true)}>
+        <button className="layer-name studio-name" onClick={() => setNameEdit(true)}>
           {project.name}
         </button>
         <div className="spacer" />
@@ -539,7 +539,7 @@ function LayersPanel(props: {
 function layerLabel(l: Layer): string {
   if (l.type === 'text') return `“${l.text.slice(0, 16)}”`
   if (l.type === 'image') return 'Image'
-  if (l.type === 'draw') return `Dessin · ${l.strokes.length} trait(s)`
+  if (l.type === 'draw') return `Dessin · ${l.strokes.length} trait${l.strokes.length > 1 ? 's' : ''}`
   if (l.type === 'vector') return 'Illustration'
   return `Forme · ${l.shape}`
 }

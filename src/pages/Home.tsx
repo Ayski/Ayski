@@ -36,7 +36,7 @@ export default function Home({ onCreate, onOpenProject, goExplore, goGallery, go
   return (
     <div className="page">
       <div className="eyebrow">Card Skin Studio</div>
-      <h1 className="page-title">{greeting} 👋</h1>
+      <h1 className="page-title">{greeting}</h1>
       <p className="page-sub">Créez des visuels de cartes premium, puis exportez-les en haute résolution.</p>
 
       {recent[0] ? (
@@ -45,14 +45,14 @@ export default function Home({ onCreate, onOpenProject, goExplore, goGallery, go
           <div style={{ maxWidth: 320, margin: '0 auto' }}>
             <CardPreview project={recent[0]} width={640} />
           </div>
-          <p style={{ textAlign: 'center', marginTop: 12, fontWeight: 600 }}>{recent[0].name}</p>
+          <p className="tile-title" style={{ textAlign: 'center' }}>{recent[0].name}</p>
         </button>
       ) : (
         <div className="card" style={{ padding: 20, textAlign: 'center' }}>
           <div style={{ maxWidth: 300, margin: '0 auto 14px' }}>
             <CardPreview project={templatePreview(recommended[1])} width={640} />
           </div>
-          <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>Votre première carte vous attend.</p>
+          <p className="hero-caption">Votre première carte vous attend.</p>
         </div>
       )}
 
@@ -63,21 +63,21 @@ export default function Home({ onCreate, onOpenProject, goExplore, goGallery, go
       <div className="grid-2 mt">
         <button className="panel" style={{ textAlign: 'left' }} onClick={goExplore}>
           <IconExplore width={22} style={{ color: 'var(--accent)' }} />
-          <div style={{ marginTop: 8, fontWeight: 600 }}>Explorer</div>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{TEMPLATES.length} modèles</div>
+          <div className="tile-title">Explorer</div>
+          <div className="tile-sub">{TEMPLATES.length} modèles</div>
         </button>
         <button className="panel" style={{ textAlign: 'left' }} onClick={goGallery}>
           <IconGallery width={22} style={{ color: 'var(--accent)' }} />
-          <div style={{ marginTop: 8, fontWeight: 600 }}>Mes créations</div>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{recent.length} projet(s)</div>
+          <div className="tile-title">Mes créations</div>
+          <div className="tile-sub">{recent.length === 0 ? 'Aucun projet' : `${recent.length} projet${recent.length > 1 ? 's' : ''}`}</div>
         </button>
       </div>
 
       <button className="panel mt" style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12 }} onClick={goWallet}>
         <IconWallet width={22} style={{ color: 'var(--accent)' }} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600 }}>Compatibilité Apple Wallet</div>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Ce qui est possible — et ce qui ne l’est pas.</div>
+          <div className="tile-title" style={{ marginTop: 0 }}>Compatibilité Apple Wallet</div>
+          <div className="tile-sub">Ce qui est possible — et ce qui ne l’est pas.</div>
         </div>
       </button>
 
