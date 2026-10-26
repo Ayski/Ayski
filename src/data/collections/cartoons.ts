@@ -1,7 +1,13 @@
-import { text, bg, vec, backdrop, title, type Template } from '../builders'
+import { bg, vec, backdrop, type Template } from '../builders'
 import {
-  sponge, seaBackdrop, donut, skyClouds, sunnySky, portal, flask, starfield, alienWorld, lazyCat, lasagna, checks, kitchenWall, mysteryVan, ghost, hauntedNight,
+  sponge, seaBackdrop, donut, sunnySky, skyClouds, portal, flask, crystals, starfield, alienWorld,
+  lazyCat, lasagna, checks, kitchenWall, sunbeam, mysteryVan, ghost, hauntedNight,
 } from '../art/cartoons'
+
+// Text-free cartoon cards: the illustration fills the whole card.
+// A transparent layer shadow forces off-screen rendering, which the distant
+// donut's 'source-atop' haze relies on.
+const OFFSCREEN = { color: 'rgba(0,0,0,0)', blur: 0.1, dx: 0, dy: 0 }
 
 export const CARTOON_TEMPLATES: Template[] = [
   {
@@ -9,13 +15,10 @@ export const CARTOON_TEMPLATES: Template[] = [
     name: 'Éponge des Mers',
     category: 'Dessins',
     badge: 'Animé',
-    background: bg({ kind: 'linear', color1: '#55c6f4', color2: '#0a4f8c', angle: 90 }),
+    background: bg({ kind: 'linear', color1: '#5fd0f7', color2: '#073566', angle: 90 }),
     layers: [
       backdrop(seaBackdrop()),
-      vec(sponge(), 0.735, 0.615, 0.31, { rotation: 2, shadow: { color: 'rgba(0,30,70,0.35)', blur: 6, dx: 0, dy: 4 } }),
-      title('ÉPONGE', { y: 0.31, size: 0.165, color: '#fff35c', color2: '#ffb300' }),
-      title('DES MERS', { y: 0.48, size: 0.115, color: '#ffffff', color2: '#cdeeff' }),
-      text('« Je suis prêt ! »', { x: 0.075, y: 0.66, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.056, weight: 400, color: '#ffffff', outline: '#0b3a63', outlineWidth: 0.09 }),
+      vec(sponge(), 0.54, 0.565, 0.4, { rotation: 2, shadow: { color: 'rgba(0,30,70,0.3)', blur: 5, dx: 2, dy: 3 } }),
     ],
   },
   {
@@ -26,11 +29,9 @@ export const CARTOON_TEMPLATES: Template[] = [
     background: bg({ kind: 'linear', color1: '#8fd8ff', color2: '#2f8fe0', angle: 90 }),
     layers: [
       backdrop(sunnySky()),
-      backdrop(skyClouds([[22, 11, 0.3], [124, 11, 0.42]])),
-      vec(donut(), 0.725, 0.55, 0.42, { rotation: -4, shadow: { color: 'rgba(0,40,90,0.25)', blur: 6, dx: 0, dy: 4 } }),
-      title('MMMH…', { y: 0.3, size: 0.12, color: '#fff7b0', color2: '#ffc21a' }),
-      title('DONUTS', { y: 0.47, size: 0.165, color: '#ffc6de', color2: '#f2559b' }),
-      text('glaçage rose & vermicelles', { x: 0.07, y: 0.645, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.044, weight: 400, color: '#ffffff', outline: '#0f4c8a', outlineWidth: 0.08 }),
+      vec(donut(0.55), 0.17, 0.42, 0.16, { rotation: 14, shadow: OFFSCREEN }),
+      backdrop(skyClouds([[132, 14, 0.4], [150, 58, 0.24]])),
+      vec(donut(), 0.58, 0.55, 0.5, { rotation: -4, shadow: { color: 'rgba(0,40,90,0.25)', blur: 6, dx: 2, dy: 4 } }),
     ],
   },
   {
@@ -42,11 +43,9 @@ export const CARTOON_TEMPLATES: Template[] = [
     layers: [
       backdrop(starfield(17)),
       backdrop(alienWorld()),
-      vec(portal(), 0.69, 0.47, 0.4, { shadow: { color: 'rgba(120,255,60,0.35)', blur: 10, dx: 0, dy: 0 } }),
-      vec(flask(), 0.9, 0.73, 0.1, { rotation: 6 }),
-      title('PORTAIL', { y: 0.31, size: 0.17, font: 'Bangers', color: '#dcff66', color2: '#5fd629', letterSpacing: 0.01 }),
-      title('VERT', { y: 0.49, size: 0.17, font: 'Bangers', color: '#ffffff', color2: '#c4ecff', letterSpacing: 0.01 }),
-      text('aller-retour inter-dimensions', { x: 0.07, y: 0.655, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.042, weight: 400, color: '#c9f75a', outline: '#0b1630', outlineWidth: 0.08 }),
+      vec(crystals(), 0.15, 0.7, 0.26),
+      vec(portal(), 0.5, 0.455, 0.46),
+      vec(flask(), 0.83, 0.725, 0.12, { rotation: 5 }),
     ],
   },
   {
@@ -58,11 +57,9 @@ export const CARTOON_TEMPLATES: Template[] = [
     layers: [
       backdrop(kitchenWall()),
       vec(checks(), 0.5, 0.875, 1.04, { locked: true }),
-      vec(lazyCat(), 0.72, 0.53, 0.42, { shadow: { color: 'rgba(40,20,0,0.25)', blur: 6, dx: 0, dy: 3 } }),
-      vec(lasagna(), 0.3, 0.78, 0.3),
-      title('JE DÉTESTE', { y: 0.2, size: 0.1, color: '#ffffff', color2: '#ffe2c4' }),
-      title('LES LUNDIS', { y: 0.35, size: 0.125, color: '#ffc457', color2: '#f2781e' }),
-      text('« Réveillez-moi mardi. »', { x: 0.07, y: 0.495, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.044, weight: 400, color: '#ffffff', outline: '#155a78', outlineWidth: 0.08 }),
+      backdrop(sunbeam()),
+      vec(lasagna(), 0.27, 0.78, 0.32),
+      vec(lazyCat(), 0.66, 0.55, 0.48),
     ],
   },
   {
@@ -73,11 +70,8 @@ export const CARTOON_TEMPLATES: Template[] = [
     background: bg({ kind: 'linear', color1: '#120b2e', color2: '#4a3a86', angle: 90 }),
     layers: [
       backdrop(hauntedNight()),
-      vec(ghost(), 0.585, 0.2, 0.075, { rotation: -8, opacity: 0.95 }),
-      vec(mysteryVan(), 0.62, 0.7, 0.6, { shadow: { color: 'rgba(0,0,0,0.35)', blur: 6, dx: 0, dy: 4 } }),
-      title('LE VAN', { y: 0.17, size: 0.1, color: '#d2ff8a', color2: '#5fcf3a' }),
-      title('MYSTÈRE', { y: 0.31, size: 0.135, color: '#ffd96b', color2: '#ff8a1e' }),
-      text('enquêtes & frissons', { x: 0.07, y: 0.445, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.044, weight: 400, color: '#ffffff', outline: '#1b1036', outlineWidth: 0.08 }),
+      vec(ghost(), 0.17, 0.28, 0.12, { rotation: -10, opacity: 0.96 }),
+      vec(mysteryVan(), 0.565, 0.665, 0.825),
     ],
   },
 ]
