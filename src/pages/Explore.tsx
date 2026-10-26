@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import CardPreview from '../components/CardPreview'
 import { IconSearch, IconStar, IconStarFill } from '../components/icons'
 import { Sheet } from '../components/ui'
-import { CATEGORIES, TEMPLATES, templateToProject, type Template } from '../data/templates'
+import { CATEGORIES, NEW_FILTER, TEMPLATES, templateToProject, type Template } from '../data/templates'
 import { isFavorite, toggleFavorite } from '../data/favorites'
 import type { CardProject } from '../types'
 
@@ -14,7 +14,9 @@ export default function Explore({ onOpen }: { onOpen: (p: CardProject) => void }
   const [favTick, setFavTick] = useState(0)
 
   const list = useMemo(() => {
-    let items = TEMPLATES.filter((t) => (cat === 'Tous' ? true : t.category === cat))
+    let items = TEMPLATES.filter((t) =>
+      cat === 'Tous' ? true : cat === NEW_FILTER ? Boolean(t.badge) : t.category === cat,
+    )
     if (q.trim()) {
       const n = q.toLowerCase()
       items = items.filter((t) => t.name.toLowerCase().includes(n) || t.category.toLowerCase().includes(n))
@@ -66,7 +68,10 @@ export default function Explore({ onOpen }: { onOpen: (p: CardProject) => void }
             </div>
             <div className="tpl-meta row-between">
               <div>
-                <div className="tpl-name">{t.name}</div>
+                <div className="tpl-name">
+                  {t.name}
+                  {t.badge && <span className="tpl-badge">{t.badge}</span>}
+                </div>
                 <div className="tpl-cat">{t.category}</div>
               </div>
               {isFavorite(t.key) ? <IconStarFill width={18} style={{ color: 'var(--accent)' }} /> : <IconStar width={18} style={{ color: 'var(--text-faint)' }} />}

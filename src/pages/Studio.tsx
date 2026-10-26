@@ -822,9 +822,9 @@ function ExportPanel({
       </div>
       <div className="field-label"><span>Résolution</span></div>
       <div className="wrap mb">
-        {[1024, 2048, 3072].map((r) => (
+        {[1024, 1536, 2048, 3072].map((r) => (
           <button key={r} className={`chip ${res === r ? 'active' : ''}`} onClick={() => setRes(r)}>
-            {r === 1024 ? 'Standard' : r === 2048 ? 'Haute' : 'Ultra'} · {r}px
+            {r === 1024 ? 'Standard' : r === 1536 ? 'Skin' : r === 2048 ? 'Haute' : 'Ultra'} · {r}px
           </button>
         ))}
       </div>

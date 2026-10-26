@@ -116,6 +116,19 @@ export default function Home({ onCreate, onOpenProject, goExplore, goGallery, go
       )}
 
       <div className="section-head">
+        <h2>Nouveautés · Signature</h2>
+        <button className="link" onClick={goExplore}>Tout voir</button>
+      </div>
+      <div className="hscroll">
+        {TEMPLATES.filter((t) => t.badge).map((t) => (
+          <button key={t.key} className="tpl" onClick={() => onCreate(templateToProject(t))}>
+            <div className="tpl-thumb"><CardPreview project={templateToProject(t)} width={360} /></div>
+            <div className="tpl-meta"><div className="tpl-name">{t.name}</div><div className="tpl-cat">{t.category}</div></div>
+          </button>
+        ))}
+      </div>
+
+      <div className="section-head">
         <h2>Collections recommandées</h2>
       </div>
       <div className="hscroll">
