@@ -102,6 +102,14 @@ export interface Background {
   glow: number // 0..1 directional sheen strength
 }
 
+// A single side of the card.
+export interface CardFace {
+  background: Background
+  layers: Layer[]
+}
+
+export type FaceKey = 'front' | 'back'
+
 export interface CardProject {
   id: string
   name: string
@@ -110,12 +118,33 @@ export interface CardProject {
   updatedAt: number
   favorite: boolean
   aspect: number // width / height
+  // The front face is stored at the top level (keeps older saved projects valid).
   background: Background
   layers: Layer[]
+  // The back face is optional; created on demand when first edited.
+  back?: CardFace
   thumbnail?: string // small dataURL cache
 }
 
 export const CARD_ASPECT = 1.586 // ISO/IEC 7810 ID-1 (85.6 × 53.98 mm)
+
+export function defaultBackBackground(): Background {
+  return {
+    kind: 'linear',
+    color1: '#101218',
+    color2: '#070809',
+    angle: 115,
+    finish: 'matte',
+    grain: 0,
+    glow: 0.15,
+  }
+}
+
+// Read a face from a project (front is top-level; back may be absent).
+export function readFace(p: CardProject, which: FaceKey): CardFace {
+  if (which === 'back') return p.back ?? { background: defaultBackBackground(), layers: [] }
+  return { background: p.background, layers: p.layers }
+}
 
 export function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)

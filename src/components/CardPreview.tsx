@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react'
-import type { CardProject, DrawStroke, Layer } from '../types'
+import type { CardProject, DrawStroke, FaceKey, Layer } from '../types'
+import { readFace } from '../types'
 import { preloadProject, renderCard, strokePath } from '../studio/render'
 
 interface Props {
   project: CardProject
   width?: number // internal render resolution
   showGrid?: boolean
+  faceKey?: FaceKey
   selectedId?: string | null
   onSelect?: (id: string | null) => void
   onMove?: (id: string, x: number, y: number) => void
@@ -17,9 +19,10 @@ interface Props {
   onStroke?: (s: DrawStroke) => void
 }
 
-function hitTest(project: CardProject, nx: number, ny: number): Layer | null {
-  for (let i = project.layers.length - 1; i >= 0; i--) {
-    const l = project.layers[i]
+function hitTest(project: CardProject, faceKey: FaceKey, nx: number, ny: number): Layer | null {
+  const layers = readFace(project, faceKey).layers
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const l = layers[i]
     if (!l.visible || l.locked || l.type === 'draw') continue
     let hw = 0.18
     let hh = 0.18
@@ -42,6 +45,7 @@ export default function CardPreview({
   project,
   width = 1000,
   showGrid = false,
+  faceKey = 'front',
   onSelect,
   onMove,
   interactive = false,
@@ -67,7 +71,8 @@ export default function CardPreview({
       overlayRef.current.height = h
     }
     const ctx = canvas.getContext('2d')!
-    const draw = () => !cancelled && renderCard(ctx, project, { width, showGrid, radius: h * 0.08 })
+    const draw = () =>
+      !cancelled && renderCard(ctx, project, { width, showGrid, radius: h * 0.08, face: faceKey })
     preloadProject(project).then(() => {
       if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw)
       else draw()
@@ -76,7 +81,7 @@ export default function CardPreview({
     return () => {
       cancelled = true
     }
-  }, [project, width, showGrid])
+  }, [project, width, showGrid, faceKey])
 
   function toNorm(e: React.PointerEvent) {
     const rect = canvasRef.current!.getBoundingClientRect()
@@ -104,7 +109,7 @@ export default function CardPreview({
     }
     if (!interactive) return
     const { nx, ny } = toNorm(e)
-    const hit = hitTest(project, nx, ny)
+    const hit = hitTest(project, faceKey, nx, ny)
     if (hit) {
       onSelect?.(hit.id)
       drag.current = { id: hit.id, startX: nx, startY: ny, origX: hit.x, origY: hit.y }

@@ -2,11 +2,13 @@ import type {
   Background,
   CardProject,
   DrawLayer,
+  FaceKey,
   ImageLayer,
   Layer,
   ShapeLayer,
   TextLayer,
 } from '../types'
+import { readFace } from '../types'
 
 // ---- Image cache ------------------------------------------------------------
 const imgCache = new Map<string, HTMLImageElement>()
@@ -32,9 +34,8 @@ export function preloadImage(src: string): Promise<HTMLImageElement> {
 }
 
 export async function preloadProject(project: CardProject): Promise<void> {
-  const srcs = project.layers
-    .filter((l): l is ImageLayer => l.type === 'image')
-    .map((l) => l.src)
+  const layers = [...project.layers, ...(project.back?.layers ?? [])]
+  const srcs = layers.filter((l): l is ImageLayer => l.type === 'image').map((l) => l.src)
   await Promise.all(srcs.map((s) => preloadImage(s).catch(() => undefined)))
 }
 
@@ -400,18 +401,20 @@ export interface RenderOptions {
   width: number // target pixel width of the card
   showGrid?: boolean
   radius?: number // corner radius in px; defaults to 8% of height
+  face?: FaceKey // which side to render (default front)
 }
 
 export function renderCard(ctx: CanvasRenderingContext2D, project: CardProject, opts: RenderOptions) {
   const w = opts.width
   const h = w / project.aspect
   const r = opts.radius ?? h * 0.08
+  const face = readFace(project, opts.face ?? 'front')
   ctx.clearRect(0, 0, w, h)
   ctx.save()
   roundRectPath(ctx, 0, 0, w, h, r)
   ctx.clip()
-  paintBackground(ctx, project.background, w, h)
-  for (const layer of project.layers) drawLayer(ctx, layer, w, h)
+  paintBackground(ctx, face.background, w, h)
+  for (const layer of face.layers) drawLayer(ctx, layer, w, h)
   if (opts.showGrid) drawGrid(ctx, w, h)
   ctx.restore()
   // subtle edge for depth
@@ -452,6 +455,7 @@ export async function exportProject(
   type: 'image/png' | 'image/jpeg' = 'image/png',
   quality = 0.95,
   transparent = false,
+  face: FaceKey = 'front',
 ): Promise<string> {
   await preloadProject(project)
   const h = Math.round(width / project.aspect)
@@ -459,14 +463,13 @@ export async function exportProject(
   canvas.width = Math.round(width)
   canvas.height = h
   const ctx = canvas.getContext('2d')!
+  // JPEG has no alpha; for PNG keep the rounded-corner area transparent only
+  // when explicitly requested, otherwise paint an opaque backdrop.
   if (type === 'image/jpeg' || !transparent) {
-    // opaque backdrop for formats without alpha / when transparency not wanted
-    if (type === 'image/jpeg') {
-      ctx.fillStyle = '#000000'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-    }
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
   }
-  renderCard(ctx, project, { width: Math.round(width), radius: transparent ? h * 0.08 : h * 0.08 })
+  renderCard(ctx, project, { width: Math.round(width), radius: h * 0.08, face })
   return canvas.toDataURL(type, quality)
 }
 

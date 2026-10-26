@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import CardPreview from '../components/CardPreview'
+import Card3D from '../components/Card3D'
 import {
   IconBg,
   IconBrush,
@@ -8,6 +8,7 @@ import {
   IconDown,
   IconExport,
   IconEye,
+  IconFlip,
   IconImage,
   IconLayers,
   IconLock,
@@ -26,9 +27,12 @@ import { exportProject } from '../studio/render'
 import { fileToDownscaledImage, pickImage, shareOrDownload, dataUrlToBlob } from '../studio/image'
 import { createDrawLayer, createImageLayer, createShapeLayer, createTextLayer, FONTS } from '../studio/layers'
 import type {
+  Background,
+  CardFace,
   CardProject,
   DrawLayer,
   DrawStroke,
+  FaceKey,
   Finish,
   ImageLayer,
   Layer,
@@ -36,7 +40,7 @@ import type {
   ShapeLayer,
   TextLayer,
 } from '../types'
-import { uid } from '../types'
+import { defaultBackBackground, readFace, uid } from '../types'
 
 type Tab = 'layers' | 'bg' | 'object' | 'draw' | 'export'
 
@@ -66,6 +70,37 @@ export default function Studio({
   const [brushColor, setBrushColor] = useState('#D9B45B')
   const [brushWidth, setBrushWidth] = useState(0.014)
   const activeDrawRef = useRef<string | null>(null)
+  const [activeFace, setActiveFace] = useState<FaceKey>('front')
+  const faceRef = useRef<FaceKey>('front')
+  faceRef.current = activeFace
+
+  // Returns a live, mutable view of the face currently being edited.
+  const faceAccess = useCallback((d: CardProject): CardFace => {
+    if (faceRef.current === 'back') {
+      if (!d.back) d.back = { background: defaultBackBackground(), layers: [] }
+      return d.back
+    }
+    return {
+      get background() {
+        return d.background
+      },
+      set background(v: Background) {
+        d.background = v
+      },
+      get layers() {
+        return d.layers
+      },
+      set layers(v: Layer[]) {
+        d.layers = v
+      },
+    } as CardFace
+  }, [])
+
+  function switchFace(which: FaceKey) {
+    setActiveFace(which)
+    setSelectedId(null)
+    activeDrawRef.current = null
+  }
 
   const mutate = useCallback((fn: (draft: CardProject) => void) => {
     setProject((prev) => {
@@ -98,19 +133,25 @@ export default function Studio({
     force((n) => n + 1)
   }
 
+  const faceLayers = useMemo(() => readFace(project, activeFace).layers, [project, activeFace])
+  const faceBackground = useMemo(
+    () => readFace(project, activeFace).background,
+    [project, activeFace],
+  )
   const selected = useMemo(
-    () => project.layers.find((l) => l.id === selectedId) ?? null,
-    [project.layers, selectedId],
+    () => faceLayers.find((l) => l.id === selectedId) ?? null,
+    [faceLayers, selectedId],
   )
 
   const updateLayer = useCallback(
     (id: string, patch: Partial<Layer>) => {
       mutate((d) => {
-        const i = d.layers.findIndex((l) => l.id === id)
-        if (i >= 0) d.layers[i] = { ...d.layers[i], ...patch } as Layer
+        const f = faceAccess(d)
+        const i = f.layers.findIndex((l) => l.id === id)
+        if (i >= 0) f.layers[i] = { ...f.layers[i], ...patch } as Layer
       })
     },
-    [mutate],
+    [mutate, faceAccess],
   )
 
   // ---- autosave ----
@@ -159,7 +200,7 @@ export default function Studio({
       if (!file) return
       const img = await fileToDownscaledImage(file)
       const layer = createImageLayer(img)
-      mutate((d) => d.layers.push(layer))
+      mutate((d) => faceAccess(d).layers.push(layer))
       setSelectedId(layer.id)
       setTab('object')
     } catch (e) {
@@ -168,13 +209,13 @@ export default function Studio({
   }
   function addText() {
     const l = createTextLayer()
-    mutate((d) => d.layers.push(l))
+    mutate((d) => faceAccess(d).layers.push(l))
     setSelectedId(l.id)
     setTab('object')
   }
   function addShape() {
     const l = createShapeLayer()
-    mutate((d) => d.layers.push(l))
+    mutate((d) => faceAccess(d).layers.push(l))
     setSelectedId(l.id)
     setTab('object')
   }
@@ -183,70 +224,74 @@ export default function Studio({
     setTab('draw')
     setSelectedId(null)
     const cur = activeDrawRef.current
-    const exists = project.layers.some((l) => l.id === cur && l.type === 'draw')
+    const exists = faceLayers.some((l) => l.id === cur && l.type === 'draw')
     if (!exists) {
       const dl = createDrawLayer()
       activeDrawRef.current = dl.id
-      mutate((d) => d.layers.push(dl))
+      mutate((d) => faceAccess(d).layers.push(dl))
     }
   }
   function addStroke(s: DrawStroke) {
     mutate((d) => {
-      let dl = d.layers.find((l) => l.id === activeDrawRef.current && l.type === 'draw') as
+      const f = faceAccess(d)
+      let dl = f.layers.find((l) => l.id === activeDrawRef.current && l.type === 'draw') as
         | DrawLayer
         | undefined
       if (!dl) {
         dl = createDrawLayer()
         activeDrawRef.current = dl.id
-        d.layers.push(dl)
+        f.layers.push(dl)
       }
       dl.strokes.push(s)
     })
   }
   function undoStroke() {
     mutate((d) => {
-      const dl = d.layers.find((l) => l.id === activeDrawRef.current && l.type === 'draw') as
-        | DrawLayer
-        | undefined
+      const dl = faceAccess(d).layers.find(
+        (l) => l.id === activeDrawRef.current && l.type === 'draw',
+      ) as DrawLayer | undefined
       if (dl) dl.strokes.pop()
     })
   }
   function clearStrokes() {
     mutate((d) => {
-      const dl = d.layers.find((l) => l.id === activeDrawRef.current && l.type === 'draw') as
-        | DrawLayer
-        | undefined
+      const dl = faceAccess(d).layers.find(
+        (l) => l.id === activeDrawRef.current && l.type === 'draw',
+      ) as DrawLayer | undefined
       if (dl) dl.strokes = []
     })
   }
   function newDrawLayer() {
     const dl = createDrawLayer()
     activeDrawRef.current = dl.id
-    mutate((d) => d.layers.push(dl))
+    mutate((d) => faceAccess(d).layers.push(dl))
   }
 
   function duplicateLayer(id: string) {
     mutate((d) => {
-      const i = d.layers.findIndex((l) => l.id === id)
+      const f = faceAccess(d)
+      const i = f.layers.findIndex((l) => l.id === id)
       if (i >= 0) {
-        const copy = { ...clone(d.layers[i]), id: uid(), x: d.layers[i].x + 0.04, y: d.layers[i].y + 0.04 }
-        d.layers.splice(i + 1, 0, copy as Layer)
+        const copy = { ...clone(f.layers[i]), id: uid(), x: f.layers[i].x + 0.04, y: f.layers[i].y + 0.04 }
+        f.layers.splice(i + 1, 0, copy as Layer)
       }
     })
   }
   function removeLayer(id: string) {
     mutate((d) => {
-      d.layers = d.layers.filter((l) => l.id !== id)
+      const f = faceAccess(d)
+      f.layers = f.layers.filter((l) => l.id !== id)
     })
     if (selectedId === id) setSelectedId(null)
   }
   function reorder(id: string, dir: -1 | 1) {
     mutate((d) => {
-      const i = d.layers.findIndex((l) => l.id === id)
+      const f = faceAccess(d)
+      const i = f.layers.findIndex((l) => l.id === id)
       const j = i + dir
-      if (i >= 0 && j >= 0 && j < d.layers.length) {
-        const [x] = d.layers.splice(i, 1)
-        d.layers.splice(j, 0, x)
+      if (i >= 0 && j >= 0 && j < f.layers.length) {
+        const [x] = f.layers.splice(i, 1)
+        f.layers.splice(j, 0, x)
       }
     })
   }
@@ -286,19 +331,38 @@ export default function Studio({
       </div>
 
       <div className={`studio-stage ${lightBg ? 'light-bg' : ''}`}>
-        <CardPreview
-          project={shown}
-          width={previewWidth(settings.previewQuality)}
-          showGrid={grid}
-          interactive={!compare && tab !== 'draw'}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onMove={(id, x, y) => updateLayer(id, { x, y })}
-          drawMode={tab === 'draw' && !compare}
-          brushColor={brushColor}
-          brushWidth={brushWidth}
-          onStroke={addStroke}
-        />
+        <div style={{ width: '100%', maxWidth: 440, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Card3D
+            project={shown}
+            face={activeFace}
+            width={previewWidth(settings.previewQuality)}
+            showGrid={grid}
+            interactive={!compare && tab !== 'draw'}
+            onSelect={setSelectedId}
+            onMove={(id, x, y) => updateLayer(id, { x, y })}
+            drawMode={tab === 'draw' && !compare}
+            brushColor={brushColor}
+            brushWidth={brushWidth}
+            onStroke={addStroke}
+          />
+          <div className="row" style={{ justifyContent: 'center', gap: 10 }}>
+            <div className="face-switch">
+              <button className={activeFace === 'front' ? 'active' : ''} onClick={() => switchFace('front')}>
+                Recto
+              </button>
+              <button className={activeFace === 'back' ? 'active' : ''} onClick={() => switchFace('back')}>
+                Verso
+              </button>
+            </div>
+            <button
+              className="flip-btn"
+              onClick={() => switchFace(activeFace === 'front' ? 'back' : 'front')}
+              aria-label="Retourner la carte"
+            >
+              <IconFlip width={16} /> Retourner
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="studio-tools">
@@ -314,9 +378,10 @@ export default function Studio({
         </div>
 
         <div className="tool-body">
+         <div className="slide-in" key={tab}>
           {tab === 'layers' && (
             <LayersPanel
-              project={project}
+              layers={faceLayers}
               selectedId={selectedId}
               onSelect={(id) => {
                 setSelectedId(id)
@@ -333,7 +398,15 @@ export default function Studio({
             />
           )}
           {tab === 'bg' && (
-            <BackgroundPanel project={project} onChange={(bg) => mutate((d) => (d.background = { ...d.background, ...bg }))} />
+            <BackgroundPanel
+              bg={faceBackground}
+              onChange={(patch) =>
+                mutate((d) => {
+                  const f = faceAccess(d)
+                  f.background = { ...f.background, ...patch }
+                })
+              }
+            />
           )}
           {tab === 'object' && (
             <ObjectPanel
@@ -355,7 +428,15 @@ export default function Studio({
               onNewLayer={newDrawLayer}
             />
           )}
-          {tab === 'export' && <ExportPanel project={project} onSave={saveNow} onDuplicate={duplicateProject} />}
+          {tab === 'export' && (
+            <ExportPanel
+              project={project}
+              face={activeFace}
+              onSave={saveNow}
+              onDuplicate={duplicateProject}
+            />
+          )}
+         </div>
         </div>
       </div>
 
@@ -387,7 +468,7 @@ function ToolTab({ active, onClick, icon, label }: { active: boolean; onClick: (
 
 // ---- Layers panel -----------------------------------------------------------
 function LayersPanel(props: {
-  project: CardProject
+  layers: Layer[]
   selectedId: string | null
   onSelect: (id: string) => void
   onAddImage: () => void
@@ -399,8 +480,7 @@ function LayersPanel(props: {
   onToggleLock: (id: string, v: boolean) => void
   onToggleVisible: (id: string, v: boolean) => void
 }) {
-  const { project } = props
-  const reversed = [...project.layers].reverse()
+  const reversed = [...props.layers].reverse()
   return (
     <div>
       <div className="grid-2 mb">
@@ -452,8 +532,7 @@ function layerLabel(l: Layer): string {
 }
 
 // ---- Background panel -------------------------------------------------------
-function BackgroundPanel({ project, onChange }: { project: CardProject; onChange: (bg: Partial<CardProject['background']>) => void }) {
-  const bg = project.background
+function BackgroundPanel({ bg, onChange }: { bg: Background; onChange: (patch: Partial<Background>) => void }) {
   const finishes: { key: Finish; label: string }[] = [
     { key: 'matte', label: 'Mat' },
     { key: 'gloss', label: 'Brillant' },
@@ -694,21 +773,32 @@ function DrawPanel({
 }
 
 // ---- Export panel -----------------------------------------------------------
-function ExportPanel({ project, onSave, onDuplicate }: { project: CardProject; onSave: (m?: string) => void; onDuplicate: () => void }) {
+function ExportPanel({
+  project,
+  face,
+  onSave,
+  onDuplicate,
+}: {
+  project: CardProject
+  face: FaceKey
+  onSave: (m?: string) => void
+  onDuplicate: () => void
+}) {
   const toast = useToast()
   const [format, setFormat] = useState<'png' | 'jpeg'>('png')
   const [res, setRes] = useState(2048)
   const [transparent, setTransparent] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  async function doExport() {
+  async function doExport(which: FaceKey) {
     setBusy(true)
     try {
       const type = format === 'png' ? 'image/png' : 'image/jpeg'
-      const dataUrl = await exportProject(project, res, type, 0.95, format === 'png' && transparent)
+      const dataUrl = await exportProject(project, res, type, 0.95, format === 'png' && transparent, which)
       const blob = dataUrlToBlob(dataUrl)
       const ext = format === 'png' ? 'png' : 'jpg'
-      const name = `${project.name.replace(/[^\w-]+/g, '_')}_${res}.${ext}`
+      const side = which === 'front' ? 'recto' : 'verso'
+      const name = `${project.name.replace(/[^\w-]+/g, '_')}_${side}_${res}.${ext}`
       const result = await shareOrDownload(blob, name)
       toast(result === 'shared' ? 'Partagé' : 'Image enregistrée')
     } catch (e) {
@@ -738,9 +828,17 @@ function ExportPanel({ project, onSave, onDuplicate }: { project: CardProject; o
           </button>
         ))}
       </div>
-      <button className="btn btn-primary btn-block mb" onClick={doExport} disabled={busy}>
-        <IconExport width={18} /> {busy ? 'Export…' : 'Exporter / Partager'}
+      <button className="btn btn-primary btn-block mb" onClick={() => doExport(face)} disabled={busy}>
+        <IconExport width={18} /> {busy ? 'Export…' : `Exporter ${face === 'front' ? 'le recto' : 'le verso'}`}
       </button>
+      <div className="grid-2 mb">
+        <button className="btn btn-ghost btn-sm" onClick={() => doExport('front')} disabled={busy}>
+          Recto
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => doExport('back')} disabled={busy}>
+          Verso
+        </button>
+      </div>
       <div className="grid-2">
         <button className="btn btn-ghost btn-sm" onClick={() => onSave()}>
           <IconSave width={16} /> Enregistrer

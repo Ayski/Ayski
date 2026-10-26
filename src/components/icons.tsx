@@ -173,3 +173,12 @@ export const IconEye = (p: SVGProps<SVGSVGElement>) => (
     <circle cx="12" cy="12" r="2.5" />
   </svg>
 )
+export const IconFlip = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M12 3v18" />
+    <path d="M7 8 4 11l3 3" />
+    <path d="M4 11h7" />
+    <path d="m17 16 3-3-3-3" />
+    <path d="M20 13h-7" />
+  </svg>
+)
