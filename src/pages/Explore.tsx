@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import CardPreview from '../components/CardPreview'
 import { IconSearch, IconStar, IconStarFill } from '../components/icons'
 import { Sheet } from '../components/ui'
-import { CATEGORIES, NEW_FILTER, TEMPLATES, templateToProject, type Template } from '../data/templates'
+import { CATEGORIES, NEW_FILTER, TEMPLATES, templatePreview, templateToProject, type Template } from '../data/templates'
 import { isFavorite, toggleFavorite } from '../data/favorites'
 import type { CardProject } from '../types'
 
@@ -64,7 +64,7 @@ export default function Explore({ onOpen }: { onOpen: (p: CardProject) => void }
         {list.map((t) => (
           <button key={t.key} className="tpl" onClick={() => setPreview(t)}>
             <div className="tpl-thumb">
-              <CardPreview project={templateToProject(t)} width={420} />
+              <CardPreview project={templatePreview(t)} width={420} lazy />
             </div>
             <div className="tpl-meta row-between">
               <div>
@@ -83,7 +83,7 @@ export default function Explore({ onOpen }: { onOpen: (p: CardProject) => void }
       {preview && (
         <Sheet title={preview.name} onClose={() => setPreview(null)}>
           <div style={{ maxWidth: 360, margin: '0 auto 18px' }}>
-            <CardPreview project={templateToProject(preview)} width={720} />
+            <CardPreview project={templatePreview(preview)} width={720} />
           </div>
           <p className="page-sub" style={{ textAlign: 'center' }}>{preview.category}</p>
           <button className="btn btn-primary btn-block mb" onClick={() => onOpen(templateToProject(preview))}>

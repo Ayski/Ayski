@@ -1,5 +1,6 @@
 import { CARD_ASPECT, type Background, type DrawStroke, type Layer, type VectorShadow } from '../types'
 import type { Art } from './art/kit'
+import { chipArt, contactlessArt, type Metal } from './art/cardparts'
 
 // Shared building blocks used by every template collection.
 
@@ -158,28 +159,17 @@ export function brushed(color: string, count: number): DrawStroke[] {
   return out
 }
 
-// EMV-style contact chip: a rounded plate plus engraved contact lines.
-export function chip(x: number, y: number, plate: string, lines = 'rgba(0,0,0,0.32)'): Layer[] {
-  const hw = 0.055
-  const hh = 0.0675
-  const w = 0.004
-  return [
-    shape({ shape: 'roundRect', x, y, width: hw * 2, height: hh * 2, fill: plate, cornerRadius: 0.012 }),
-    motif([
-      seg(x - 0.018, y - hh, x - 0.018, y + hh, lines, w),
-      seg(x + 0.018, y - hh, x + 0.018, y + hh, lines, w),
-      seg(x - hw, y - 0.022, x - 0.018, y - 0.022, lines, w),
-      seg(x - hw, y + 0.022, x - 0.018, y + 0.022, lines, w),
-      seg(x + 0.018, y - 0.022, x + hw, y - 0.022, lines, w),
-      seg(x + 0.018, y + 0.022, x + hw, y + 0.022, lines, w),
-    ]),
-  ]
+// EMV contact chip (bevelled vector plate). The plate colour picks the metal.
+export function chip(x: number, y: number, plate: string, _lines?: string): Layer[] {
+  const v = plate.replace('#', '')
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16))
+  const metal: Metal = r - b > 60 && g - b > 30 ? 'gold' : r - b > 25 ? 'rose' : 'silver'
+  return [vec(chipArt(metal), x, y, 0.11)]
 }
 
-// Contactless symbol: four concentric arcs.
+// Contactless symbol.
 export function contactless(x: number, y: number, color: string): Layer {
-  const a = (50 * Math.PI) / 180
-  return motif([0.018, 0.032, 0.046, 0.06].map((r) => arc(x - 0.03, y, r, -a, a, color, 0.0055)))
+  return vec(contactlessArt(color), x, y, 0.04)
 }
 
 // ---- illustration builders ---------------------------------------------------

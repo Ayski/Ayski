@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CardProject, DrawStroke, FaceKey, Layer } from '../types'
 import { readFace } from '../types'
 import { preloadProject, renderCard, strokePath } from '../studio/render'
@@ -17,6 +17,7 @@ interface Props {
   brushColor?: string
   brushWidth?: number // fraction of card width
   onStroke?: (s: DrawStroke) => void
+  lazy?: boolean // only render once scrolled near the viewport
 }
 
 function hitTest(project: CardProject, faceKey: FaceKey, nx: number, ny: number): Layer | null {
@@ -56,13 +57,35 @@ export default function CardPreview({
   brushColor = '#D9B45B',
   brushWidth = 0.012,
   onStroke,
+  lazy = false,
 }: Props) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(!lazy)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const drag = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null)
   const stroke = useRef<number[] | null>(null)
 
   useEffect(() => {
+    if (visible || !rootRef.current || typeof IntersectionObserver === 'undefined') {
+      if (!visible) setVisible(true)
+      return
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisible(true)
+          io.disconnect()
+        }
+      },
+      { rootMargin: '300px' },
+    )
+    io.observe(rootRef.current)
+    return () => io.disconnect()
+  }, [visible])
+
+  useEffect(() => {
+    if (!visible) return
     let cancelled = false
     const canvas = canvasRef.current
     if (!canvas) return
@@ -84,7 +107,7 @@ export default function CardPreview({
     return () => {
       cancelled = true
     }
-  }, [project, width, showGrid, faceKey])
+  }, [project, width, showGrid, faceKey, visible])
 
   function toNorm(e: React.PointerEvent) {
     const rect = canvasRef.current!.getBoundingClientRect()
@@ -152,7 +175,9 @@ export default function CardPreview({
 
   return (
     <div
+      ref={rootRef}
       className="card-preview"
+      style={{ aspectRatio: String(project.aspect) }}
       onPointerDown={onDown}
       onPointerMove={onMovePtr}
       onPointerUp={onUp}

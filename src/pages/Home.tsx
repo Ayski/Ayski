@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import CardPreview from '../components/CardPreview'
 import { IconExplore, IconGallery, IconPlus, IconWallet } from '../components/icons'
 import { getAllProjects } from '../db/storage'
-import { TEMPLATES, templateToProject, blankProject, type Template } from '../data/templates'
+import { TEMPLATES, templatePreview, templateToProject, blankProject, type Template } from '../data/templates'
 import { getFavorites } from '../data/favorites'
 import type { CardProject } from '../types'
 
@@ -50,7 +50,7 @@ export default function Home({ onCreate, onOpenProject, goExplore, goGallery, go
       ) : (
         <div className="card" style={{ padding: 20, textAlign: 'center' }}>
           <div style={{ maxWidth: 300, margin: '0 auto 14px' }}>
-            <CardPreview project={templateToProject(recommended[1])} width={640} />
+            <CardPreview project={templatePreview(recommended[1])} width={640} />
           </div>
           <p style={{ color: 'var(--text-dim)', fontSize: 14 }}>Votre première carte vous attend.</p>
         </div>
@@ -107,7 +107,7 @@ export default function Home({ onCreate, onOpenProject, goExplore, goGallery, go
           <div className="hscroll">
             {favTemplates.map((t) => (
               <button key={t.key} className="tpl" onClick={() => onCreate(templateToProject(t))}>
-                <div className="tpl-thumb"><CardPreview project={templateToProject(t)} width={360} /></div>
+                <div className="tpl-thumb"><CardPreview project={templatePreview(t)} width={360} lazy /></div>
                 <div className="tpl-meta"><div className="tpl-name">{t.name}</div></div>
               </button>
             ))}
@@ -127,7 +127,7 @@ export default function Home({ onCreate, onOpenProject, goExplore, goGallery, go
           <div className="hscroll">
             {TEMPLATES.filter((t) => s.filter(t.category)).map((t) => (
               <button key={t.key} className="tpl" onClick={() => onCreate(templateToProject(t))}>
-                <div className="tpl-thumb"><CardPreview project={templateToProject(t)} width={360} /></div>
+                <div className="tpl-thumb"><CardPreview project={templatePreview(t)} width={360} lazy /></div>
                 <div className="tpl-meta"><div className="tpl-name">{t.name}</div><div className="tpl-cat">{t.badge ?? t.category}</div></div>
               </button>
             ))}
@@ -141,7 +141,7 @@ export default function Home({ onCreate, onOpenProject, goExplore, goGallery, go
       <div className="hscroll">
         {recommended.map((t) => (
           <button key={t.key} className="tpl" onClick={() => onCreate(templateToProject(t))}>
-            <div className="tpl-thumb"><CardPreview project={templateToProject(t)} width={360} /></div>
+            <div className="tpl-thumb"><CardPreview project={templatePreview(t)} width={360} lazy /></div>
             <div className="tpl-meta"><div className="tpl-name">{t.name}</div><div className="tpl-cat">{t.category}</div></div>
           </button>
         ))}

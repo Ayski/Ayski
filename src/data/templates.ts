@@ -1,9 +1,11 @@
 import { CARD_ASPECT, uid, type CardProject, type Layer } from '../types'
-import { A, bg, brushed, chip, contactless, guilloche, motif, ring, seg, shape, text, wave, type Template } from './builders'
+import { A, backdrop, bg, brushed, chip, contactless, guilloche, motif, ring, seg, shape, text, wave, type Template } from './builders'
+import { holoFoil } from './art/core-world'
 import { CARTOON_TEMPLATES } from './collections/cartoons'
 import { GAME_TEMPLATES } from './collections/games'
 import { CHARACTER_TEMPLATES } from './collections/characters'
 import { SCENE_TEMPLATES } from './collections/scenes'
+import { CORE_V2 } from './collections/core'
 
 export type { Template } from './builders'
 
@@ -293,8 +295,8 @@ const CORE_TEMPLATES: Template[] = [
       motif(guilloche('rgba(255,255,255,0.07)', 0.0015, 18)),
       ...chip(0.17, 0.45, '#c8ccd2'),
       contactless(0.87, 0.45, 'rgba(255,255,255,0.6)'),
-      text('VOTRE NOM', { x: 0.08, y: 0.7, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.055, letterSpacing: 0.008, weight: 500, color: '#cfd2d7' }),
-      text('OBSIDIAN', { x: 0.08, y: 0.84, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.07, letterSpacing: 0.015, weight: 500, color: '#e3e5e8' }),
+      text('VOTRE NOM', { x: 0.08, y: 0.7, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.055, letterSpacing: 0.0036, weight: 500, color: '#cfd2d7' }),
+      text('OBSIDIAN', { x: 0.08, y: 0.84, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.07, letterSpacing: 0.0067, weight: 500, color: '#e3e5e8' }),
     ],
   },
   {
@@ -306,7 +308,7 @@ const CORE_TEMPLATES: Template[] = [
     layers: [
       motif(Array.from({ length: 30 }, (_, i) => seg(-0.6 + i * 0.06, 1.05, 0.06 + i * 0.06, -0.05, 'rgba(255,255,255,0.045)', 0.002))),
       ...chip(0.17, 0.42, '#9aa0a8'),
-      text('NOIR', { y: 0.8, fontFamily: 'DM Serif Display', fontSize: 0.09, letterSpacing: 0.03, weight: 400, color: '#BFC4CC' }),
+      text('NOIR', { y: 0.8, fontFamily: 'DM Serif Display', fontSize: 0.09, letterSpacing: 0.0135, weight: 400, color: '#BFC4CC' }),
     ],
   },
   {
@@ -318,7 +320,7 @@ const CORE_TEMPLATES: Template[] = [
     layers: [
       shape({ shape: 'circle', x: 0.5, y: 0.45, width: 0.12, height: 0.12 * A, fill: '#2b2d31' }),
       motif([ring(0.5, 0.45, 0.095, 'rgba(43,45,49,0.35)', 0.003)]),
-      text('galet', { y: 0.84, fontSize: 0.045, letterSpacing: 0.015, weight: 500, color: '#6b6f76' }),
+      text('galet', { y: 0.84, fontSize: 0.045, letterSpacing: 0.0067, weight: 500, color: '#6b6f76' }),
     ],
   },
   {
@@ -330,7 +332,7 @@ const CORE_TEMPLATES: Template[] = [
     layers: [
       ...chip(0.17, 0.42, '#dfe1e5', 'rgba(0,0,0,0.18)'),
       shape({ shape: 'line', x: 0.5, y: 0.78, width: 0.12, height: 0.004, fill: '#111216' }),
-      text('PUR', { y: 0.86, fontSize: 0.04, letterSpacing: 0.03, weight: 600, color: '#111216' }),
+      text('PUR', { y: 0.86, fontSize: 0.04, letterSpacing: 0.0135, weight: 600, color: '#111216' }),
     ],
   },
   {
@@ -362,8 +364,8 @@ const CORE_TEMPLATES: Template[] = [
     layers: [
       motif(guilloche('rgba(255,236,180,0.18)', 0.0015, 22)),
       ...chip(0.17, 0.45, '#f1d58b'),
-      text('GOLD', { x: 0.92, y: 0.2, align: 'right', fontFamily: 'DM Serif Display', fontSize: 0.09, letterSpacing: 0.02, weight: 400, color: '#fbecc1' }),
-      text('VOTRE NOM', { x: 0.08, y: 0.84, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.05, letterSpacing: 0.012, weight: 500, color: '#f3e4b0' }),
+      text('GOLD', { x: 0.92, y: 0.2, align: 'right', fontFamily: 'DM Serif Display', fontSize: 0.09, letterSpacing: 0.009, weight: 400, color: '#fbecc1' }),
+      text('VOTRE NOM', { x: 0.08, y: 0.84, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.05, letterSpacing: 0.0054, weight: 500, color: '#f3e4b0' }),
     ],
   },
   {
@@ -388,7 +390,7 @@ const CORE_TEMPLATES: Template[] = [
       motif(brushed('rgba(255,255,255,0.14)', 60)),
       ...chip(0.17, 0.45, '#e9ebee', 'rgba(0,0,0,0.25)'),
       contactless(0.87, 0.45, 'rgba(30,32,36,0.55)'),
-      text('PLATINE', { x: 0.08, y: 0.84, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.06, letterSpacing: 0.02, weight: 700, color: '#1d2025' }),
+      text('PLATINE', { x: 0.08, y: 0.84, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.06, letterSpacing: 0.009, weight: 700, color: '#1d2025' }),
     ],
   },
   {
@@ -396,12 +398,12 @@ const CORE_TEMPLATES: Template[] = [
     name: 'Holographique',
     category: 'Glass',
     badge: 'Nouveau',
-    background: bg({ kind: 'linear', color1: '#ff9ad5', color2: '#7ee7ff', angle: 120, finish: 'glass', glow: 0.8 }),
+    background: bg({ kind: 'linear', color1: '#ffd6f2', color2: '#b6f0ff', angle: 120, finish: 'glass', glow: 0.6 }),
     layers: [
-      shape({ shape: 'circle', x: 0.25, y: 0.3, width: 0.45, height: 0.45 * A, fill: '#8B7CFF', opacity: 0.35 }),
-      shape({ shape: 'circle', x: 0.8, y: 0.75, width: 0.4, height: 0.4 * A, fill: '#5ef0ff', opacity: 0.3 }),
-      motif([0.35, 0.5, 0.65].map((y, i) => wave(y, 0.04, 1.2, 'rgba(255,255,255,0.35)', 0.003, i * 0.25))),
-      text('HOLO', { y: 0.8, fontFamily: 'Space Grotesk', fontSize: 0.1, weight: 700, color: '#ffffff', shadow: true }),
+      backdrop(holoFoil()),
+      ...chip(0.15, 0.45, '#dfe1e5'),
+      text('HOLO', { x: 0.08, y: 0.84, align: 'left', fontFamily: 'Space Grotesk', fontSize: 0.08, weight: 700, letterSpacing: 0.006, color: '#ffffff', outline: 'rgba(90,60,160,0.45)', outlineWidth: 0.05, shadow: true }),
+      text('ÉDITION IRISÉE', { x: 0.92, y: 0.85, align: 'right', fontFamily: 'Inter', fontSize: 0.03, weight: 600, letterSpacing: 0.004, color: 'rgba(80,50,140,0.7)' }),
     ],
   },
   {
@@ -425,7 +427,7 @@ const CORE_TEMPLATES: Template[] = [
         shape({ shape: 'circle', x, y, width: 0.026, height: 0.026 * A, fill: '#ffffff', stroke: '#0a2f3a', strokeWidth: 0.004 }),
       ),
       contactless(0.9, 0.17, 'rgba(255,255,255,0.7)'),
-      text('TRANSIT', { x: 0.08, y: 0.83, align: 'left', fontFamily: 'Oswald', fontSize: 0.08, letterSpacing: 0.02, weight: 600, color: '#e9fffb' }),
+      text('TRANSIT', { x: 0.08, y: 0.83, align: 'left', fontFamily: 'Oswald', fontSize: 0.08, letterSpacing: 0.009, weight: 600, color: '#e9fffb' }),
     ],
   },
   {
@@ -441,7 +443,7 @@ const CORE_TEMPLATES: Template[] = [
         wave(0.62, 0.06, 1.1, 'rgba(201,162,74,0.45)', 0.0018, 0.6),
         wave(0.78, 0.07, 0.8, 'rgba(120,120,120,0.18)', 0.002, 0.8),
       ]),
-      text('MARBRE', { y: 0.86, fontFamily: 'DM Serif Display', fontSize: 0.075, letterSpacing: 0.025, weight: 400, color: '#3a3326' }),
+      text('MARBRE', { y: 0.86, fontFamily: 'DM Serif Display', fontSize: 0.075, letterSpacing: 0.0113, weight: 400, color: '#3a3326' }),
     ],
   },
   {
@@ -454,13 +456,16 @@ const CORE_TEMPLATES: Template[] = [
       shape({ shape: 'rect', x: 0.78, y: 0.5, width: 0.06, height: 1.2, fill: '#e0312e' }),
       shape({ shape: 'rect', x: 0.86, y: 0.5, width: 0.015, height: 1.2, fill: '#e0312e' }),
       ...chip(0.17, 0.45, '#c8ccd2'),
-      text('SPORT', { x: 0.08, y: 0.84, align: 'left', fontFamily: 'Oswald', italic: true, fontSize: 0.08, weight: 700, letterSpacing: 0.03, color: '#f5f5f7' }),
+      text('SPORT', { x: 0.08, y: 0.84, align: 'left', fontFamily: 'Oswald', italic: true, fontSize: 0.08, weight: 700, letterSpacing: 0.0135, color: '#f5f5f7' }),
     ],
   },
 ]
 
+// Redesigned originals replace the legacy entries with the same key.
+const CORE_BY_KEY = new Map(CORE_V2.map((t) => [t.key, t]))
+
 export const TEMPLATES: Template[] = [
-  ...CORE_TEMPLATES,
+  ...CORE_TEMPLATES.map((t) => CORE_BY_KEY.get(t.key) ?? t),
   ...CARTOON_TEMPLATES,
   ...GAME_TEMPLATES,
   ...CHARACTER_TEMPLATES,
@@ -478,6 +483,18 @@ export const CATEGORIES: string[] = [
   ...FEATURED.filter((c) => ALL_CATEGORIES.includes(c)),
   ...ALL_CATEGORIES.filter((c) => !FEATURED.includes(c)),
 ]
+
+// Thumbnails reuse one stable project per template so grids do not re-render
+// every card on each keystroke (templateToProject creates fresh ids each call).
+const previewCache = new WeakMap<Template, CardProject>()
+export function templatePreview(t: Template): CardProject {
+  let p = previewCache.get(t)
+  if (!p) {
+    p = templateToProject(t)
+    previewCache.set(t, p)
+  }
+  return p
+}
 
 export function templateToProject(t: Template): CardProject {
   // deep clone layers and give fresh ids
