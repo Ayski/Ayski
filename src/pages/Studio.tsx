@@ -46,6 +46,18 @@ type Tab = 'layers' | 'bg' | 'object' | 'draw' | 'export'
 
 const clone = <T,>(p: T): T => JSON.parse(JSON.stringify(p))
 
+// Copy-on-write snapshot for each edit (undo history): layers are copied
+// shallowly so heavy vector path data stays shared instead of being
+// re-serialised on every drag step. Draw strokes are the only nested array
+// edited in place, so they get their own copy.
+const copyLayer = (l: Layer): Layer => (l.type === 'draw' ? { ...l, strokes: [...l.strokes] } : { ...l })
+const snapshot = (p: CardProject): CardProject => ({
+  ...p,
+  background: { ...p.background },
+  layers: p.layers.map(copyLayer),
+  back: p.back && { background: { ...p.back.background }, layers: p.back.layers.map(copyLayer) },
+})
+
 export default function Studio({
   initial,
   onExit,
@@ -107,7 +119,7 @@ export default function Studio({
       past.current.push(prev)
       if (past.current.length > 60) past.current.shift()
       future.current = []
-      const next = clone(prev)
+      const next = snapshot(prev)
       fn(next)
       dirty.current = true
       return next
