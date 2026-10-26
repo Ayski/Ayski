@@ -1,5 +1,7 @@
 import { text, bg, vec, backdrop, title, type Template } from '../builders'
-import { sponge, seaBackdrop, donut, skyClouds, portal, flask, starfield, lazyCat, lasagna, checks, mysteryVan, hauntedNight } from '../art/cartoons'
+import {
+  sponge, seaBackdrop, donut, skyClouds, sunnySky, portal, flask, starfield, alienWorld, lazyCat, lasagna, checks, kitchenWall, mysteryVan, ghost, hauntedNight,
+} from '../art/cartoons'
 
 export const CARTOON_TEMPLATES: Template[] = [
   {
@@ -21,13 +23,14 @@ export const CARTOON_TEMPLATES: Template[] = [
     name: 'Mmmh… Donut',
     category: 'Dessins',
     badge: 'Animé',
-    background: bg({ kind: 'linear', color1: '#6ec6ff', color2: '#2f8fe0', angle: 90 }),
+    background: bg({ kind: 'linear', color1: '#8fd8ff', color2: '#2f8fe0', angle: 90 }),
     layers: [
-      backdrop(skyClouds()),
-      vec(donut(), 0.71, 0.5, 0.36, { rotation: -8 }),
-      text('MMMH…', { x: 0.07, y: 0.33, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.12, weight: 400, color: '#ffd23f', shadow: true }),
-      text('DONUTS', { x: 0.07, y: 0.5, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.15, weight: 400, color: '#f47fb2', shadow: true }),
-      text('glaçage rose, vermicelles en option', { x: 0.07, y: 0.67, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.042, weight: 400, color: '#ffffff' }),
+      backdrop(sunnySky()),
+      backdrop(skyClouds([[22, 11, 0.3], [124, 11, 0.42]])),
+      vec(donut(), 0.725, 0.55, 0.42, { rotation: -4, shadow: { color: 'rgba(0,40,90,0.25)', blur: 6, dx: 0, dy: 4 } }),
+      title('MMMH…', { y: 0.3, size: 0.12, color: '#fff7b0', color2: '#ffc21a' }),
+      title('DONUTS', { y: 0.47, size: 0.165, color: '#ffc6de', color2: '#f2559b' }),
+      text('glaçage rose & vermicelles', { x: 0.07, y: 0.645, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.044, weight: 400, color: '#ffffff', outline: '#0f4c8a', outlineWidth: 0.08 }),
     ],
   },
   {
@@ -35,14 +38,15 @@ export const CARTOON_TEMPLATES: Template[] = [
     name: 'Portail Vert',
     category: 'Dessins',
     badge: 'Animé',
-    background: bg({ kind: 'radial', color1: '#16213e', color2: '#05050f' }),
+    background: bg({ kind: 'radial', color1: '#1c2550', color2: '#05050f' }),
     layers: [
       backdrop(starfield(17)),
-      vec(portal(), 0.69, 0.5, 0.42, { sketch: false }),
-      vec(flask(), 0.89, 0.7, 0.11, { rotation: 14 }),
-      text('PORTAIL', { x: 0.07, y: 0.33, align: 'left', fontFamily: 'Bangers', fontSize: 0.16, weight: 400, letterSpacing: 0.01, color: '#9ef01a', shadow: true }),
-      text('VERT', { x: 0.07, y: 0.51, align: 'left', fontFamily: 'Bangers', fontSize: 0.16, weight: 400, letterSpacing: 0.01, color: '#ffffff', shadow: true }),
-      text('aller-retour inter-dimensions', { x: 0.07, y: 0.68, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.042, weight: 400, color: '#c9f75a' }),
+      backdrop(alienWorld()),
+      vec(portal(), 0.69, 0.47, 0.4, { shadow: { color: 'rgba(120,255,60,0.35)', blur: 10, dx: 0, dy: 0 } }),
+      vec(flask(), 0.9, 0.73, 0.1, { rotation: 6 }),
+      title('PORTAIL', { y: 0.31, size: 0.17, font: 'Bangers', color: '#dcff66', color2: '#5fd629', letterSpacing: 0.01 }),
+      title('VERT', { y: 0.49, size: 0.17, font: 'Bangers', color: '#ffffff', color2: '#c4ecff', letterSpacing: 0.01 }),
+      text('aller-retour inter-dimensions', { x: 0.07, y: 0.655, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.042, weight: 400, color: '#c9f75a', outline: '#0b1630', outlineWidth: 0.08 }),
     ],
   },
   {
@@ -50,13 +54,15 @@ export const CARTOON_TEMPLATES: Template[] = [
     name: 'Chat Lasagne',
     category: 'Dessins',
     badge: 'Animé',
-    background: bg({ kind: 'solid', color1: '#fde8c8', grain: 0.15 }),
+    background: bg({ kind: 'linear', color1: '#a9e3f0', color2: '#4fa9cc', angle: 90 }),
     layers: [
-      vec(checks(), 0.5, 0.95, 1.04, { sketch: false, locked: true }),
-      vec(lazyCat(), 0.72, 0.43, 0.38),
-      vec(lasagna(), 0.25, 0.73, 0.3),
-      text('JE DÉTESTE', { x: 0.06, y: 0.17, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.085, weight: 400, color: '#c0392b' }),
-      text('LES LUNDIS', { x: 0.06, y: 0.31, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.085, weight: 400, color: '#1b1712' }),
+      backdrop(kitchenWall()),
+      vec(checks(), 0.5, 0.875, 1.04, { locked: true }),
+      vec(lazyCat(), 0.72, 0.53, 0.42, { shadow: { color: 'rgba(40,20,0,0.25)', blur: 6, dx: 0, dy: 3 } }),
+      vec(lasagna(), 0.3, 0.78, 0.3),
+      title('JE DÉTESTE', { y: 0.2, size: 0.1, color: '#ffffff', color2: '#ffe2c4' }),
+      title('LES LUNDIS', { y: 0.35, size: 0.125, color: '#ffc457', color2: '#f2781e' }),
+      text('« Réveillez-moi mardi. »', { x: 0.07, y: 0.495, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.044, weight: 400, color: '#ffffff', outline: '#155a78', outlineWidth: 0.08 }),
     ],
   },
   {
@@ -64,12 +70,14 @@ export const CARTOON_TEMPLATES: Template[] = [
     name: 'Van Mystère',
     category: 'Dessins',
     badge: 'Animé',
-    background: bg({ kind: 'linear', color1: '#1b1036', color2: '#4a3a86', angle: 90 }),
+    background: bg({ kind: 'linear', color1: '#120b2e', color2: '#4a3a86', angle: 90 }),
     layers: [
       backdrop(hauntedNight()),
-      vec(mysteryVan(), 0.6, 0.63, 0.62),
-      text('LE VAN', { x: 0.06, y: 0.15, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.09, weight: 400, color: '#9fe870', shadow: true }),
-      text('MYSTÈRE', { x: 0.06, y: 0.28, align: 'left', fontFamily: 'Luckiest Guy', fontSize: 0.11, weight: 400, color: '#f59e2b', shadow: true }),
+      vec(ghost(), 0.585, 0.2, 0.075, { rotation: -8, opacity: 0.95 }),
+      vec(mysteryVan(), 0.62, 0.7, 0.6, { shadow: { color: 'rgba(0,0,0,0.35)', blur: 6, dx: 0, dy: 4 } }),
+      title('LE VAN', { y: 0.17, size: 0.1, color: '#d2ff8a', color2: '#5fcf3a' }),
+      title('MYSTÈRE', { y: 0.31, size: 0.135, color: '#ffd96b', color2: '#ff8a1e' }),
+      text('enquêtes & frissons', { x: 0.07, y: 0.445, align: 'left', fontFamily: 'Permanent Marker', fontSize: 0.044, weight: 400, color: '#ffffff', outline: '#1b1036', outlineWidth: 0.08 }),
     ],
   },
 ]
