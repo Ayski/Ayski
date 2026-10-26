@@ -1,7 +1,7 @@
 import { backdrop, bg, vec, type Template } from '../builders'
 import { contactlessArt } from '../art/cardparts'
 import { glitchField, heartbeat, liquidBlobs, miamiSunset, neonCity, pineForest, sunsetSea, waveBands } from '../art/core-vivid'
-import { aurora, esportsEmblem, graffitiWall, hexField, hudRings, mangaPanel, pixelLandscape, prism, sakuraBranch, seventies } from '../art/core-world'
+import { arenaStage, aurora, esportsEmblem, graffitiWall, mangaPanel, nexusCore, pixelLandscape, prism, sakuraBranch, seventies } from '../art/core-world'
 
 // Colourful / illustrated originals (Cyber, Neon, Abstract, Nature, Gaming, Anime,
 // Manga, Street, Vintage, Gradient, Geometric, Futuristic). No text on the cards.
@@ -90,8 +90,8 @@ export const CORE_VIVID: Template[] = [
     category: 'Gaming',
     background: bg({ kind: 'radial', color1: '#0d1b3a', color2: '#030714' }),
     layers: [
-      backdrop(hexField()),
-      vec(esportsEmblem(), 0.77, 0.5, 0.24, { shadow: true }),
+      backdrop(arenaStage()),
+      vec(esportsEmblem(), 0.5, 0.41, 0.27, { shadow: { color: 'rgba(0,10,40,0.6)', blur: 6, dx: 0, dy: 4 } }),
     ],
   },
   {
@@ -163,8 +163,7 @@ export const CORE_VIVID: Template[] = [
     category: 'Futuristic',
     background: bg({ kind: 'radial', color1: '#0b2238', color2: '#020812' }),
     layers: [
-      backdrop(hexField('rgba(56,189,248,0.08)')),
-      vec(hudRings(), 0.72, 0.5, 0.36),
+      backdrop(nexusCore()),
     ],
   },
 ]
