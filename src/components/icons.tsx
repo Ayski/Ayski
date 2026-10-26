@@ -1,12 +1,16 @@
 import type { SVGProps } from 'react'
 
-const base = (p: SVGProps<SVGSVGElement>) => ({
+const base = ({ width, height, ...p }: SVGProps<SVGSVGElement>) => ({
   viewBox: '0 0 24 24',
   fill: 'none',
   stroke: 'currentColor',
   strokeWidth: 1.8,
   strokeLinecap: 'round' as const,
   strokeLinejoin: 'round' as const,
+  // Explicit dimensions: Safari/iOS collapses a viewBox-only SVG to 0px
+  // when it is a direct flex child. Default to 24, keep icons square.
+  width: width ?? 24,
+  height: height ?? width ?? 24,
   ...p,
 })
 
