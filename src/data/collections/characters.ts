@@ -26,7 +26,7 @@ interface CharacterCard {
   key: string
   name: string
   kind: string
-  art: Art
+  art: () => Art // built on first use: hand-drawn portraits are heavy
   scene: (s: Stage) => VectorPath[]
   colors: [string, string]
   accent: string
@@ -264,18 +264,21 @@ function frameArt(r: RarityLook): Art {
 // ornate frame whose metal, gems and foil carry the rarity.
 function characterCard(c: CharacterCard): Template {
   const r = RARITY[c.rarity]
-  const layers: Layer[] = [
-    backdrop(stageArt(c, r)),
-    vec(c.art, CX / W, (FY + 1 - BUST_H / 2) / H, BUST_W / W),
-    backdrop(frameArt(r)),
-  ]
+  // Layers are built lazily so app start-up does not pay for every portrait.
+  let layers: Layer[] | undefined
   return {
     key: c.key,
     name: c.name,
     category: 'Personnages',
     badge: c.rarity,
     background: bg({ kind: 'radial', color1: c.colors[0], color2: c.colors[1], finish: c.finish ?? 'gloss', glow: 0.2, grain: 0.06 }),
-    layers,
+    get layers() {
+      return (layers ??= [
+        backdrop(stageArt(c, r)),
+        vec(c.art(), CX / W, (FY + 1 - BUST_H / 2) / H, BUST_W / W),
+        backdrop(frameArt(r)),
+      ])
+    },
   }
 }
 
@@ -284,7 +287,7 @@ export const CHARACTER_TEMPLATES: Template[] = [
     key: 'chr-chevalier',
     name: 'Sire Boulon',
     kind: 'CHEVALIER · ACIER',
-    art: knight(),
+    art: knight,
     scene: knightScene,
     colors: ['#1e3a5f', '#0b1626'],
     accent: '#ffd166',
@@ -296,7 +299,7 @@ export const CHARACTER_TEMPLATES: Template[] = [
     key: 'chr-mage',
     name: 'Mage Zéphyr',
     kind: 'MAGE · COSMOS',
-    art: wizard(),
+    art: wizard,
     scene: wizardScene,
     colors: ['#3c1a78', '#12062b'],
     accent: '#c7a6ff',
@@ -308,7 +311,7 @@ export const CHARACTER_TEMPLATES: Template[] = [
     key: 'chr-ninja',
     name: 'Kagero',
     kind: 'NINJA · OMBRE',
-    art: ninja(),
+    art: ninja,
     scene: ninjaScene,
     colors: ['#2b2b33', '#0a0a0d'],
     accent: '#ff4d4d',
@@ -320,7 +323,7 @@ export const CHARACTER_TEMPLATES: Template[] = [
     key: 'chr-robot',
     name: 'R-0B1N',
     kind: 'ROBOT · ROUILLE',
-    art: robot(),
+    art: robot,
     scene: robotScene,
     colors: ['#334155', '#0f172a'],
     accent: '#5ef0ff',
@@ -332,7 +335,7 @@ export const CHARACTER_TEMPLATES: Template[] = [
     key: 'chr-dragon',
     name: 'Aurum',
     kind: 'DRAGON · OR',
-    art: dragon(),
+    art: dragon,
     scene: dragonScene,
     colors: ['#6a240c', '#1c0603'],
     accent: '#ffd84d',
@@ -345,7 +348,7 @@ export const CHARACTER_TEMPLATES: Template[] = [
     key: 'chr-pirate',
     name: 'Cap. Brume',
     kind: 'SPECTRE · MER',
-    art: pirateGhost(),
+    art: pirateGhost,
     scene: ghostScene,
     colors: ['#0f3b4a', '#041318'],
     accent: '#8fe3ff',
