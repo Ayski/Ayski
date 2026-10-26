@@ -1,5 +1,8 @@
 import type { VectorPath } from '../../types'
-import { circ, ell, gloss, INK, lin, pixels, poly, rad, radLit, rect, rng, rrect, shade, softShadow, star, type Art } from './kit'
+import { circ, ell, INK, lin, pixels, poly, rad, radLit, rect, rng, rrect, shade, softShadow, star, type Art } from './kit'
+import { dab, form, grain, hatch, inkLine, inkRing, oval, place, rimLight, shift, smooth, strokesIn, tube, within, type Curve, type InkOpts, type Pt } from './cartoons'
+
+const T = 'rgba(255,255,255,0)'
 
 // Hand-made parody art of classic video-game universes (original drawings,
 // no official logos, sprites ripped from games, or trademarked names).
@@ -69,11 +72,6 @@ function lambertL(nx: number, ny: number, lx: number, ly: number, lz = 0.6): num
 
 const rgba = (rgb: string, a: number) => `rgba(${rgb},${a})`
 
-// Core/form shadow: darkens a shape from its lit side to its far side.
-function core(d: string, x0: number, y0: number, x1: number, y1: number, rgb = '40,20,70', a = 0.55, start = 0.4): VectorPath {
-  return { d, fill: lin(x0, y0, x1, y1, 0, rgba(rgb, 0), start, rgba(rgb, 0), 1, rgba(rgb, a)), blend: 'multiply' }
-}
-
 // Rim light: inner band along the edge of a shape, fading toward the key side.
 function rim(d: string, w: number, x0: number, y0: number, x1: number, y1: number, rgb = '255,255,255', a = 0.85, start = 0.55): VectorPath {
   return { d, stroke: lin(x0, y0, x1, y1, 0, rgba(rgb, 0), start, rgba(rgb, 0), 1, rgba(rgb, a)), sw: w * 2, clip: d, blend: 'screen' }
@@ -87,38 +85,6 @@ function glow(cx: number, cy: number, r: number, rgb: string, a = 0.6, blend: Gl
 // Shadow cast on the ground: stacked translucent ellipses, multiplied.
 function castShadow(cx: number, cy: number, rx: number, ry: number, a = 0.5, rgb = '20,10,40'): VectorPath[] {
   return softShadow(cx, cy, rx, ry, a, rgb).map((p) => ({ ...p, blend: 'multiply' as GlobalCompositeOperation }))
-}
-
-// Transform an absolute M/L/Q/C/Z path: scale, rotate (deg), then translate.
-function xf(d: string, dx: number, dy: number, rot = 0, s = 1): string {
-  const c = Math.cos((rot * Math.PI) / 180)
-  const sn = Math.sin((rot * Math.PI) / 180)
-  const tok = d.match(/[MLQCZ]|-?\d*\.?\d+/g) ?? []
-  let out = ''
-  let pend: number | null = null
-  for (const t of tok) {
-    if (/[MLQCZ]/.test(t)) {
-      out += t
-      continue
-    }
-    const v = parseFloat(t)
-    if (pend === null) pend = v
-    else {
-      const x = pend * s
-      const y = v * s
-      out += `${(dx + x * c - y * sn).toFixed(2)} ${(dy + x * sn + y * c).toFixed(2)} `
-      pend = null
-    }
-  }
-  return out
-}
-
-// Ink-outlined limb: thick ink stroke with a coloured core.
-function limb(d: string, color: string, w = 8): VectorPath[] {
-  return [
-    { d, stroke: INK, sw: w },
-    { d, stroke: color, sw: w - 4.4 },
-  ]
 }
 
 // Soft cartoon cloud without ink: lit puffs over a shaded flat base.
@@ -372,103 +338,239 @@ export function hellScene(): Art {
 }
 
 // ---- Blue speedy hedgehog ----------------------------------------------------
+// Key light: the low sun, upper-left. Cool sky rim on the lower-right edges.
 const HB = '#2f74e8' // hedgehog blue
-const HB_D = '#1a479f'
 const PEACH = '#f7c99b'
+const SKY_RIM = 'rgba(200,240,255,0.95)'
+const HLT: Pt = [-0.68, -0.73]
 
-function sneaker(x: number, y: number, rot: number, s = 1): VectorPath[] {
-  const t = (d: string) => xf(d, x, y, rot, s)
+const hInk = (cv: Curve, o: InkOpts = {}, seed = 7): VectorPath => ({ d: inkRing(cv, { light: HLT, ...o }, seed), fill: INK })
+const hLine = (f: number[], w: number, seed = 3, t0 = 0.22, t1 = 0.32, col = INK): VectorPath => ({ d: inkLine(f, w, seed, t0, t1), fill: col })
+const hMul = (d: string, fill: string, clip: string): VectorPath => ({ d, fill, clip, blend: 'multiply' })
+
+// Running sneaker authored pointing +x, placed with place().
+function sneaker(x: number, y: number, rot: number, s: number, seed: number, far = false): VectorPath[] {
+  const P = (f: number[]) => place(f, x, y, rot, s)
+  const SHOE = form(P([-15, 3, -14.5, -4, -11, -9.5, -4, -11.5, 4, -10, 11, -8.5, 18, -5.5, 24.5, -1, 27, 4, 24, 8.6, 12, 9.4, -2, 9.4, -12.5, 8.4]), seed, 0.3, 1)
+  const S = SHOE.d
+  const SOLE = smooth(P([-20, 4.6, -6, 5.6, 8, 5.8, 20, 5, 30, 3, 32, 14, -20, 14]))
+  const STRAP = form(P([-3.5, -11.4, 3.5, -10.6, 7.5, 7.5, -0.5, 8.5]), seed + 1, 0.2, 1)
+  const CUFF = form(P([-11.6, -9.4, -7, -11.2, 0.4, -12.2, 2, -10.4, 1.6, -15.5, -4, -17.4, -10.8, -15.6, -12.6, -12.8]), seed + 2, 0.2, 1)
   return [
-    { d: t('M-9 -18 L7 -18 L7 -8 L-9 -8 Z'), fill: lin(x - 9 * s, 0, x + 7 * s, 0, 0, '#ffffff', 1, '#d7dde6'), stroke: INK, sw: 3 },
-    { d: t('M-13 -4 Q-13 -13 0 -12 Q15 -11 25 -5 Q35 1 33 8 L-15 8 Q-18 2 -13 -4 Z'), fill: lin(x, y - 13 * s, x, y + 8 * s, 0, '#ff5a4d', 0.55, '#e0262a', 1, '#a3141c'), stroke: INK, sw: 3.5 },
-    core(t('M-13 -4 Q-13 -13 0 -12 Q15 -11 25 -5 Q35 1 33 8 L-15 8 Q-18 2 -13 -4 Z'), x - 10, y - 14, x + 20, y + 10, '90,0,30', 0.5),
-    { d: t('M-3 -12 Q2 -12 7 -11 L4 7 L-6 7 Z'), fill: lin(x, y - 12 * s, x, y + 7 * s, 0, '#ffffff', 1, '#cfd6df'), stroke: INK, sw: 2.5 },
-    { d: t('M-3 -3 L5 -3 L4.5 2 L-3.5 2 Z'), fill: '#f5c518', stroke: INK, sw: 1.8 },
-    { d: t('M-16 6 L34 6 Q36 12 29 13 L-12 13 Q-18 12 -16 6 Z'), fill: lin(x, y + 6 * s, x, y + 13 * s, 0, '#ffffff', 1, '#b9c2cc'), stroke: INK, sw: 3 },
-    gloss(t('M11 -8 Q19 -6 25 -2'), 2.6, 0.85),
-    { d: t('M14 -7 L17 -6.5'), stroke: '#ffffff', sw: 2.4 },
+    { d: S, fill: lin(x, y - 12 * s, x, y + 10 * s, 0, '#ff6a5a', 0.5, '#e32a2a', 1, '#a8141c') },
+    ...within(S, [...dab(...(P([12, -5]) as [number, number]), 9 * s, 4 * s, '255,170,150', 0.55, seed + 3, rot)]),
+    { d: SOLE, fill: lin(x, y + 4 * s, x, y + 10 * s, 0, '#ffffff', 1, '#c4ccd8'), clip: S },
+    { d: inkLine(P([-13, 5.2, 4, 6, 24, 4.8]), 1.3 * s, seed + 4, 0.1, 0.15), fill: INK },
+    hMul(shift(S, 2 * s, 2.4 * s), 'rgba(120,10,40,0.55)', S),
+    { d: STRAP.d, fill: lin(x - 4, y - 10, x + 6, y + 8, 0, '#ffffff', 1, '#cfd6e2'), clip: S },
+    { d: smooth(place(oval(2.4, -1.5, 3, 2.4, 10, seed + 5, 0.08), x, y, rot, s)), fill: lin(x - 2, y - 4, x + 4, y + 2, 0, '#fff3a0', 1, '#d99a10') },
+    hInk(STRAP, { w: 1.6 * s, thin: 0.5, taper: 2 }, seed + 6),
+    { d: hatch(P([-10, 7.2, 4, 7.8]), 4, 3 * s, rot + 245, 0.6, seed + 7), fill: 'rgba(60,0,10,0.6)', clip: S },
+    rimLight(S, lin(...(P([-15, -10]) as [number, number]), ...(P([27, 9]) as [number, number]), 0, T, 0.6, T, 1, SKY_RIM), 1.4),
+    hInk(SHOE, { w: 3 * s, thin: 0.8, taper: 5 }, seed + 8),
+    { d: smooth(place(oval(15, -4.5, 4.6, 1.5, -18, seed + 9, 0.12), x, y, rot, s)), fill: 'rgba(255,255,255,0.85)' },
+    { d: CUFF.d, fill: lin(x - 10, y - 16, x, y - 9, 0, '#ffffff', 1, '#c9d2e0') },
+    hMul(shift(CUFF.d, 1.6 * s, 1.4 * s), 'rgba(120,130,180,0.5)', CUFF.d),
+    hInk(CUFF, { w: 2.2 * s, thin: 0.6, taper: 3 }, seed + 10),
+    ...(far ? [hMul(S, 'rgba(170,170,230,0.55)', S), hMul(CUFF.d, 'rgba(170,170,230,0.55)', CUFF.d)] : []),
   ]
 }
 
-function glove(x: number, y: number, rot: number, s = 1): VectorPath[] {
-  const t = (d: string) => xf(d, x, y, rot, s)
+// White glove (fist) authored pointing +x, with a rolled cuff.
+function glove(x: number, y: number, rot: number, s: number, seed: number): VectorPath[] {
+  const P = (f: number[]) => place(f, x, y, rot, s)
+  const FIST = form(P([-6.5, -6.5, -1, -8.6, 4.5, -8.4, 8.6, -5.8, 10.6, -1.5, 10, 3, 7.4, 6.6, 2, 8.4, -3.5, 8, -7, 5, -7.6, 0]), seed, 0.2, 1)
+  const CUFF = form(P([-12.4, -7.4, -7.6, -8.6, -5.6, -4, -5.6, 4, -7.6, 8.8, -12.4, 7.6, -14, 0]), seed + 1, 0.2, 1)
   return [
-    { d: t('M-14 -7 Q-16 0 -14 7 L-7 7 Q-9 0 -7 -7 Z'), fill: '#eef1f5', stroke: INK, sw: 3 },
-    { d: t('M-7 -9 Q3 -13 9 -6 Q13 0 9 7 Q3 13 -7 9 Q-10 0 -7 -9 Z'), fill: radLit(x, y, 12 * s, 0, '#ffffff', 0.7, '#f1f3f7', 1, '#c9d0da'), stroke: INK, sw: 3.5 },
-    core(t('M-7 -9 Q3 -13 9 -6 Q13 0 9 7 Q3 13 -7 9 Q-10 0 -7 -9 Z'), x - 8, y - 10, x + 9, y + 10, '70,80,140', 0.45),
-    { d: t('M1 -6 Q6 -5 7 -1 M1 1 Q6 2 6 6'), stroke: 'rgba(27,23,18,0.55)', sw: 1.8 },
+    { d: FIST.d, fill: lin(x - 8, y - 8, x + 8, y + 8, 0, '#ffffff', 0.6, '#f1f3f8', 1, '#c4ccdc') },
+    hMul(shift(FIST.d, 2 * s, 2.4 * s), 'rgba(130,140,200,0.55)', FIST.d),
+    hInk(FIST, { w: 2.6 * s, thin: 0.6, taper: 3 }, seed + 2),
+    hLine(P([3, -7.8, 4, -3, 2.8, 1]), 1 * s, seed + 3, 0.1, 0.5),
+    hLine(P([7.6, -5, 8.2, -1, 6.6, 3]), 0.9 * s, seed + 4, 0.1, 0.5),
+    hLine(P([-2.5, 2, 1.5, 3.4, 4.5, 6.8]), 1 * s, seed + 5, 0.3, 0.3),
+    { d: CUFF.d, fill: lin(x - 12, y - 8, x - 6, y + 8, 0, '#ffffff', 1, '#d2d9e6') },
+    hMul(shift(CUFF.d, 1.4 * s, 1.6 * s), 'rgba(130,140,200,0.5)', CUFF.d),
+    hInk(CUFF, { w: 2.2 * s, thin: 0.6, taper: 3 }, seed + 6),
+    hLine(P([-9.6, -6.6, -8.4, 0, -9.6, 6.6]), 0.8 * s, seed + 7, 0.2, 0.2, 'rgba(60,70,120,0.7)'),
   ]
 }
 
 export function hedgehog(): Art {
-  const QUILL = lin(20, 24, 120, 130, 0, '#64a4ff', 0.45, HB, 1, HB_D)
-  const HEAD = radLit(126, 72, 46, 0, '#72aeff', 0.55, HB, 1, '#1c4dab')
-  const quills =
-    'M136 32 C118 10 60 4 24 28 C54 36 80 48 98 54 C70 40 30 42 6 66 C40 72 70 78 92 80 C64 72 34 84 14 110 C48 104 76 102 98 100 C80 104 62 120 50 140 C80 132 104 120 120 108 Z'
+  const HFILL = lin(60, 20, 180, 120, 0, '#6aa9ff', 0.45, HB, 1, '#1d4fb0')
+
+  // Thick, cone-like quill: wide base hidden in the head, bowed upper edge,
+  // concave underside, soft point. Shaded as a volume: lit top, dark belly.
+  const quill = (bx: number, by: number, tx: number, ty: number, w: number, bend: number, seed: number) => {
+    const dx = tx - bx
+    const dy = ty - by
+    const L = Math.hypot(dx, dy)
+    const ux = dx / L
+    const uy = dy / L
+    // n points to the upper (lit) side
+    let nx = -uy
+    let ny = ux
+    if (ny > 0) {
+      nx = -nx
+      ny = -ny
+    }
+    const at = (t: number, off: number): [number, number] => [bx + dx * t + nx * off, by + dy * t + ny * off]
+    const bow = (t: number) => bend * Math.sin(Math.PI * Math.min(1, t * 1.1))
+    const pts = [
+      at(-0.12, 0), at(0, w), at(0.3, w * 0.86 + bow(0.3)), at(0.62, w * 0.5 + bow(0.62)), at(0.88, w * 0.16 + bow(0.88)),
+      at(0.975, w * 0.04 + bend * 0.12), at(1, 0), at(0.975, -w * 0.06 + bend * 0.1), at(0.86, -w * 0.18 + bow(0.86) * 0.9),
+      at(0.58, -w * 0.5 + bow(0.58) * 0.85), at(0.28, -w * 0.84 + bow(0.28) * 0.7), at(0, -w),
+    ].flat()
+    const cv = form(pts, seed, 0.35, 1.1)
+    const Q = cv.d
+    const top = [at(0.05, w * 0.72), at(0.3, w * 0.62 + bow(0.3)), at(0.6, w * 0.32 + bow(0.6)), at(0.85, w * 0.1 + bow(0.85))].flat()
+    const under = [at(0.04, -w * 0.82), at(0.25, -w * 0.7 + bow(0.25) * 0.7), at(0.5, -w * 0.42 + bow(0.5) * 0.85)].flat()
+    return {
+      cv,
+      paths: [
+        { d: Q, fill: lin(...at(0.3, w), ...at(0.3, -w), 0, '#79b6ff', 0.45, HB, 1, '#1a46a6') },
+        ...within(Q, [...dab(...at(0.3, w * 0.35 + bow(0.3)), L * 0.22, w * 0.5, '150,205,255', 0.45, seed + 1, (Math.atan2(dy, dx) * 180) / Math.PI)]),
+        // the underside turns away from the sun: a cel shadow that follows the cone
+        hMul(shift(Q, -nx * w * 0.95, -ny * w * 0.95), 'rgba(14,26,110,0.62)', Q),
+        hMul(shift(Q, -nx * w * 1.45, -ny * w * 1.45), 'rgba(10,16,80,0.3)', Q),
+        { d: hatch(under, 5, w * 0.5, (Math.atan2(-ny, -nx) * 180) / Math.PI + 30, 0.7, seed + 2), fill: 'rgba(4,8,50,0.6)', clip: Q },
+        { d: inkLine(top, w * 0.32, seed + 3, 0.25, 0.55), fill: 'rgba(205,232,255,0.8)', clip: Q },
+        rimLight(Q, lin(...at(0.4, w), ...at(0.4, -w), 0, T, 0.7, T, 1, SKY_RIM), 1.4),
+        { d: strokesIn(Math.min(bx, tx), Math.min(by, ty) - w, Math.abs(dx), Math.abs(dy) + 2 * w, 26, 4, (Math.atan2(dy, dx) * 180) / Math.PI, 0.28, seed + 4), fill: 'rgba(10,25,90,0.28)', clip: Q },
+        hInk(cv, { w: 3.8, thin: 0.9, taper: 7, gap: -1, heavy: [[tx, ty, L * 0.3, 0.22]] }, seed + 5),
+      ],
+    }
+  }
+  const Q1 = quill(124, 46, 46, 8, 17, 11, 501) // top, sweeping back and up
+  const Q2 = quill(112, 64, 10, 38, 18.5, 11, 511)
+  const Q3 = quill(108, 84, 14, 76, 17, 9, 521)
+  const Q4 = quill(112, 100, 38, 108, 13.5, 7, 531) // lower one, shorter
+  const BACK = quill(112, 120, 82, 134, 8, 2, 541) // little spike on the back
+
+  const HEAD = form([138, 33, 156, 36.5, 170, 47.5, 177, 65, 175, 84, 165.5, 99, 149, 108, 131, 110, 115, 104.5, 105, 92, 101.5, 74, 105, 55, 116, 40.5], 551, 0.4, 1.2)
+  const H = HEAD.d
+  const EAR = form([124, 42, 127, 25, 135, 3.5, 135, 3.5, 147, 17, 156, 37], 553, 0.35, 1)
+  const EAR_IN = smooth([130, 38, 133, 24, 137, 12, 144, 22, 150, 36])
+  const EAR_FAR = form([152, 40, 158, 24, 166, 13, 166, 13, 170, 28, 171, 46], 555, 0.3, 1)
+
+  const BODY = form([118, 105, 132, 107, 140, 117, 142, 131, 136.5, 144.5, 123, 151.5, 110, 148.5, 103.5, 137, 104.5, 121, 109.5, 110.5], 557, 0.4, 1)
+  const BELLY = form([126, 113, 136, 118, 138.5, 131, 132.5, 143, 122, 147.5, 117.5, 138, 119.5, 124], 559, 0.3, 1)
+  const ARM_FAR = form(tube([133, 114, 150, 128, 162, 121], [3.6, 3.1, 2.9], 1), 561, 0.2, 1)
+  const ARM_NEAR = form(tube([116, 117, 100, 132.5, 86.5, 122], [3.8, 3.2, 3], 1), 563, 0.2, 1)
+  const LEG_FAR = form(tube([112, 143, 90, 157, 68, 150.5], [5.5, 4, 3.6], 1), 565, 0.25, 1)
+  const LEG_NEAR = form(tube([126, 142, 141, 158, 142.5, 177], [5.8, 4.3, 3.8], 1), 567, 0.25, 1)
+  // compact, rounded, slightly upturned muzzle that also forms the lower face
+  const MUZZLE = form([130.5, 90, 139, 85, 151, 86.5, 162, 84.5, 171, 81, 177.5, 76.5, 183, 76.5, 186, 81.5, 184.5, 89.5, 178, 98, 168, 105.5, 155, 110, 141.5, 109.5, 132.5, 102], 571, 0.35, 1)
+  const EYES = form([137, 64, 139.5, 50.5, 147.5, 44, 155.5, 47.5, 159, 53.5, 162, 46.5, 168, 42.5, 174.5, 48.5, 177, 62, 176, 76, 171, 85.5, 164.5, 86.5, 159.5, 81, 155, 87.5, 146, 89, 139, 81], 573, 0.3, 1)
+  const E = EYES.d
+  const NOSE = form(oval(182.5, 77.5, 4.6, 4, -10, 575, 0.06), 575, 0.15, 0.8)
+
   const paths: VectorPath[] = [
-    // speed streaks
-    { d: 'M0 92 H8 M30 150 H70', stroke: 'rgba(255,255,255,0.85)', sw: 4 },
-    ...castShadow(152, 194, 62, 6, 0.5, '10,50,20'),
-    ...castShadow(168, 191, 22, 3, 0.45, '5,30,10'),
-    // far arm reaching forward (behind the body)
-    ...limb('M138 118 Q154 128 168 124', PEACH, 9),
-    ...glove(173, 123, -8, 0.9),
-    // far leg kicked back
-    ...limb('M114 146 Q100 160 82 158', HB, 10),
-    ...sneaker(78, 156, 140, 0.9),
-    // quills with a shaded underside and lit upper edge
-    { d: quills, fill: QUILL, stroke: INK, sw: 4.5 },
-    {
-      d:
-        'M98 54 C80 48 54 36 24 28 C56 32 82 40 104 46 Z M92 80 C70 78 40 72 6 66 C40 70 70 72 96 72 Z' +
-        'M98 100 C76 102 48 104 14 110 C46 100 74 96 98 92 Z M120 108 C104 120 80 132 50 140 C78 126 98 114 114 102 Z',
-      fill: 'rgba(10,30,95,0.38)',
-    },
-    core(quills, 40, 14, 110, 130, '10,20,80', 0.6, 0.35),
-    rim(quills, 2.6, 60, 20, 100, 140, '190,235,255', 0.9, 0.6),
-    gloss('M114 22 Q86 13 52 22', 3.4, 0.6),
-    gloss('M84 53 Q58 50 30 62', 3, 0.5),
-    gloss('M80 83 Q56 85 36 99', 2.8, 0.45),
-    gloss('M86 108 Q72 116 62 128', 2.6, 0.4),
-    // torso + belly
-    { d: 'M108 108 Q98 138 112 152 Q128 162 144 148 Q152 128 144 104 Z', fill: lin(100, 0, 150, 0, 0, '#4c8cf5', 1, HB_D), stroke: INK, sw: 4 },
-    { d: 'M124 112 Q116 134 126 148 Q138 152 142 138 Q144 122 138 108 Z', fill: lin(0, 108, 0, 152, 0, '#ffe0bd', 1, '#e9ad78') },
-    core('M108 108 Q98 138 112 152 Q128 162 144 148 Q152 128 144 104 Z', 104, 108, 148, 152, '20,20,80', 0.55),
-    // near leg planted forward
-    ...limb('M132 148 Q150 150 156 158 Q162 166 160 174', HB, 10),
-    ...sneaker(162, 178, -6, 1.02),
-    // ears (behind the head)
-    { d: 'M142 40 Q150 22 162 10 Q168 28 164 46 Z', fill: lin(0, 10, 0, 46, 0, '#3f82ef', 1, HB_D), stroke: INK, sw: 4 },
-    { d: 'M106 42 Q108 20 116 4 Q130 18 138 36 Z', fill: lin(0, 4, 0, 42, 0, '#64a4ff', 1, HB), stroke: INK, sw: 4 },
-    { d: 'M114 36 Q115 24 118 15 Q125 24 129 34 Z', fill: lin(0, 15, 0, 36, 0, '#ffd8b4', 1, '#e8a878') },
-    // head
-    { d: circ(126, 72, 42), fill: HEAD, stroke: INK, sw: 4.5 },
-    core(circ(126, 72, 42), 96, 40, 160, 110, '10,20,90', 0.65, 0.42),
-    rim(circ(126, 72, 42), 3, 110, 50, 160, 112, '200,240,255', 0.95, 0.55),
-    gloss('M92 64 Q96 42 116 34', 4.5, 0.6),
-    // muzzle + smile
-    { d: 'M116 98 Q120 85 138 85 Q156 81 170 86 Q183 91 181 105 Q177 120 156 121 Q132 123 122 114 Q112 106 116 98 Z', fill: lin(0, 86, 0, 123, 0, '#ffe4c8', 0.6, PEACH, 1, '#e09c68'), stroke: INK, sw: 4 },
-    core('M116 98 Q120 85 138 85 Q156 81 170 86 Q183 91 181 105 Q177 120 156 121 Q132 123 122 114 Q112 106 116 98 Z', 130, 86, 170, 124, '140,50,20', 0.5),
-    gloss('M123 96 Q129 89 140 89', 2.4, 0.75),
-    { d: 'M146 111 Q160 117 172 107', stroke: INK, sw: 3.5 },
-    { d: 'M170 104 Q175 105 175 110', stroke: INK, sw: 2.5 },
-    // nose
-    { d: ell(179, 92, 6, 5.2), fill: radLit(179, 92, 6, 0, '#5a5560', 1, '#0d0d10'), stroke: INK, sw: 2.5 },
-    { d: circ(177.3, 90, 1.6), fill: 'rgba(255,255,255,0.85)' },
-    // eyes: ink pass then white fill so the two ovals merge
-    { d: ell(142, 65, 13, 18.5) + ell(161, 66, 9.5, 17), stroke: INK, sw: 7.5 },
-    { d: ell(142, 65, 13, 18.5), fill: radLit(150, 61, 28, 0, '#ffffff', 1, '#d8e2ee') },
-    { d: ell(161, 66, 9.5, 17), fill: radLit(150, 61, 28, 0, '#ffffff', 1, '#d8e2ee') },
-    { d: 'M145 45 Q151 53 152.5 62 Q155 53 160 47 L158 41 L146 41 Z', fill: HEAD },
-    { d: 'M145 46.5 Q151 53 152.5 62 Q155 53 159.5 48', stroke: INK, sw: 3 },
-    { d: ell(149, 69, 7, 10.5), fill: radLit(149, 69, 10, 0, '#9af286', 1, '#1f8a3a'), stroke: INK, sw: 1.6 },
-    { d: ell(166, 69.5, 5.4, 10), fill: radLit(166, 69.5, 9, 0, '#9af286', 1, '#1f8a3a'), stroke: INK, sw: 1.6 },
-    { d: ell(150.6, 70, 3.6, 6) + ell(167.3, 70.5, 2.9, 5.6), fill: INK },
-    { d: circ(152.8, 65, 2.6) + circ(169, 65.5, 2.1), fill: '#ffffff' },
-    { d: circ(147, 75, 1.2) + circ(164.5, 75, 1), fill: 'rgba(255,255,255,0.85)' },
-    // near arm swinging back
-    ...limb('M122 118 Q106 132 92 124', PEACH, 9),
-    ...glove(87, 121, 200, 0.95),
+    // speed streaks + ground shadow under the planted foot
+    { d: inkLine([2, 84, 18, 84.5, 34, 84], 2.2, 581, 0.6, 0.1) + inkLine([10, 112, 30, 112.6, 46, 112], 1.8, 582, 0.6, 0.1) + inkLine([30, 160, 46, 160.4, 58, 160], 1.6, 583, 0.6, 0.1), fill: 'rgba(255,255,255,0.85)' },
+    ...castShadow(150, 194, 52, 5, 0.5, '10,50,20'),
+    ...castShadow(156, 192, 22, 3, 0.45, '5,30,10'),
+
+    // far limbs, behind the body
+    { d: ARM_FAR.d, fill: lin(133, 114, 162, 121, 0, '#e8b080', 1, '#c98a5a') },
+    hInk(ARM_FAR, { w: 2.2, thin: 0.6, taper: 3 }, 585),
+    ...glove(166, 120.5, -14, 0.92, 587),
+    { d: LEG_FAR.d, fill: lin(112, 143, 68, 150, 0, '#2d63c8', 1, '#1a3f92') },
+    hMul(shift(LEG_FAR.d, 1.5, 2), 'rgba(10,20,80,0.5)', LEG_FAR.d),
+    hInk(LEG_FAR, { w: 2.8, thin: 0.7, taper: 4 }, 589),
+    ...sneaker(57, 141, 150, 0.92, 591, true),
+
+    // back spike and quills, lowest first; each casts a shadow on the one below
+    ...BACK.paths,
+    ...Q4.paths,
+    hMul(shift(Q3.cv.d, 1.5, 4), 'rgba(10,20,90,0.5)', Q4.cv.d),
+    ...Q3.paths,
+    hMul(shift(Q2.cv.d, 1.5, 4), 'rgba(10,20,90,0.5)', Q3.cv.d),
+    ...Q2.paths,
+    hMul(shift(Q1.cv.d, 1.5, 4), 'rgba(10,20,90,0.5)', Q2.cv.d),
+    ...Q1.paths,
+
+    // ears: the far one peeks out behind, the near one stands proud
+    { d: EAR_FAR.d, fill: lin(0, 13, 0, 46, 0, '#3f7fe6', 1, '#163f98') },
+    { d: smooth([158, 38, 162, 26, 165.5, 19, 167.5, 30, 167.5, 42]), fill: 'rgba(220,150,120,0.7)', clip: EAR_FAR.d },
+    hMul(EAR_FAR.d, 'rgba(60,70,160,0.45)', EAR_FAR.d),
+    hInk(EAR_FAR, { w: 2.6, thin: 0.7, taper: 4 }, 593),
+    { d: EAR.d, fill: lin(0, 4, 0, 42, 0, '#6aa9ff', 1, '#1d4fb0') },
+    { d: EAR_IN, fill: lin(0, 12, 0, 38, 0, '#ffd6c0', 0.6, '#f2a6a0', 1, '#d98478'), clip: EAR.d },
+    hMul(smooth([136, 4, 147, 18, 156, 40, 146, 38]), 'rgba(20,30,110,0.5)', EAR.d),
+    { d: inkLine([131, 36, 133.5, 24, 137, 13], 1.2, 594, 0.1, 0.5), fill: 'rgba(255,240,230,0.85)', clip: EAR.d },
+    hInk(EAR, { w: 3.2, thin: 0.8, taper: 5 }, 595),
+
+    // small round body with a tan belly, tucked under the big head
+    { d: BODY.d, fill: lin(104, 106, 142, 150, 0, '#5a98ff', 0.5, '#2f6ee0', 1, '#1a46a6') },
+    ...within(BODY.d, [...dab(112, 118, 7, 10, '150,200,255', 0.45, 597)]),
+    hMul(shift(BODY.d, 3, 2), 'rgba(20,30,110,0.45)', BODY.d),
+    { d: BELLY.d, fill: lin(0, 113, 0, 148, 0, '#ffe4c6', 1, '#eaa878'), clip: BODY.d },
+    hMul(shift(BELLY.d, 2.4, 1.8), 'rgba(215,125,85,0.5)', BELLY.d),
+    hMul(smooth([100, 102, 146, 102, 146, 114, 122, 117, 100, 113]), 'rgba(110,80,200,0.5)', BODY.d),
+    { d: hatch([132, 140, 126, 146, 118, 149], 4, 4, 300, 0.6, 599), fill: 'rgba(110,40,20,0.55)', clip: BODY.d },
+    rimLight(BODY.d, lin(110, 110, 142, 148, 0, T, 0.6, T, 1, SKY_RIM), 1.5),
+    hInk(BODY, { w: 3.4, thin: 0.8, taper: 5, heavy: [[122, 151, 12, 1.25]] }, 601),
+
+    // near leg planted forward + shoe
+    { d: LEG_NEAR.d, fill: lin(126, 142, 142, 177, 0, '#5a98ff', 1, '#1f4fb0') },
+    hMul(shift(LEG_NEAR.d, 2, 0.5), 'rgba(10,20,90,0.5)', LEG_NEAR.d),
+    hMul(smooth([116, 138, 136, 138, 136, 149, 118, 150]), 'rgba(10,20,90,0.5)', LEG_NEAR.d),
+    rimLight(LEG_NEAR.d, lin(132, 150, 148, 170, 0, T, 0.6, T, 1, SKY_RIM), 1.2),
+    hInk(LEG_NEAR, { w: 3, thin: 0.7, taper: 4 }, 603),
+    ...sneaker(146, 182.5, -4, 1.05, 605),
+
+    // ---- head ----
+    hMul(shift(H, 3, 5), 'rgba(20,20,100,0.5)', BODY.d),
+    { d: H, fill: HFILL },
+    ...within(H, [
+      ...dab(124, 50, 20, 13, '160,210,255', 0.6, 1),
+      ...dab(112, 78, 9, 18, '110,170,255', 0.35, 2),
+      ...dab(152, 100, 22, 10, '20,40,130', 0.45, 3),
+      ...dab(170, 52, 8, 10, '120,180,255', 0.3, 4),
+    ]),
+    hMul(smooth([176, 66, 174, 88, 162, 102, 142, 110, 116, 106, 134, 101, 154, 95, 168, 84]), 'rgba(16,30,110,0.5)', H),
+    rimLight(H, lin(120, 60, 170, 115, 0, T, 0.62, T, 1, SKY_RIM), 2),
+    { d: grain(100, 32, 78, 80, 220, 607, 0.18, 0.42), fill: 'rgba(10,20,70,0.18)', clip: H, blend: 'multiply' },
+    { d: strokesIn(100, 32, 50, 78, 40, 3.6, 200, 0.28, 608), fill: 'rgba(10,25,90,0.25)', clip: H },
+    hInk(HEAD, { w: 4, thin: 1, taper: 8, breaks: [0.45], gap: -1.5, heavy: [[132, 110, 18, 1.3]] }, 609),
+    { d: inkLine([108, 60, 113, 47, 124, 38.5], 2.6, 610, 0.3, 0.5), fill: 'rgba(205,232,255,0.75)' },
+
+    // ---- face: tan lower face + upturned muzzle, connected eyes, smirk ----
+    hMul(shift(MUZZLE.d, 2.4, 3.4), 'rgba(10,20,90,0.45)', H),
+    { d: MUZZLE.d, fill: lin(134, 84, 180, 110, 0, '#ffe8d0', 0.5, PEACH, 1, '#e3a06c') },
+    ...within(MUZZLE.d, [...dab(146, 93, 12, 6, '255,248,235', 0.6, 5), ...dab(172, 102, 11, 6, '205,115,75', 0.45, 6), ...dab(178, 84, 6, 4, '255,240,225', 0.5, 7)]),
+    hMul(smooth([132, 104, 156, 107, 176, 100, 186, 88, 186, 104, 156, 116, 130, 112]), 'rgba(200,110,70,0.5)', MUZZLE.d),
+    { d: hatch([148, 109, 160, 108.5, 170, 105], 5, 3.4, 250, 0.55, 611), fill: 'rgba(130,50,20,0.5)', clip: MUZZLE.d },
+    rimLight(MUZZLE.d, lin(150, 90, 180, 110, 0, T, 0.6, T, 1, 'rgba(255,240,220,0.9)'), 1.2),
+    hInk(MUZZLE, { w: 3, thin: 0.7, taper: 5, light: [-0.4, -1] }, 613),
+    // cheeky smirk: the near corner hooks up into a cheek dimple
+    hLine([150.5, 95.5, 154.5, 101.5, 162, 103.6, 170, 102.2, 177.5, 97], 2.3, 615, 0.12, 0.12),
+    hLine([147.5, 93.2, 149, 96.6, 152, 98.6], 1.4, 616, 0.3, 0.3),
+    { d: smooth([156, 102.5, 162.5, 103.8, 168, 103, 166, 106.6, 161, 107.4, 157.5, 105.6]), fill: '#c5485c' },
+    hLine([156.5, 102.8, 162.5, 104.2, 168, 103.2], 1.1, 617, 0.2, 0.2),
+    // eyes
+    hMul(shift(E, 2.4, 3), 'rgba(130,80,150,0.55)', H),
+    { d: E, fill: '#fbfdff' },
+    ...within(E, [...dab(165, 78, 10, 8, '170,190,230', 0.5, 8), ...dab(147, 52, 8, 5, '180,200,235', 0.5, 9)]),
+    { d: smooth(oval(152, 70, 7.2, 10.6, 4, 619, 0.05)) + smooth(oval(169.5, 69.5, 5.4, 10.2, 2, 620, 0.05)), fill: radLit(158, 66, 14, 0, '#c6ff9c', 0.55, '#34b04a', 1, '#14702a'), clip: E },
+    { d: smooth(oval(153.8, 71, 3.6, 6.2, 4, 621, 0.06)) + smooth(oval(171, 70.5, 2.8, 6, 2, 622, 0.06)), fill: INK, clip: E },
+    { d: smooth(oval(150, 66.4, 2.4, 3, -20, 623, 0.1)) + smooth(oval(168, 65.6, 1.9, 2.6, -20, 624, 0.1)), fill: '#ffffff', clip: E },
+    { d: smooth([132, 38, 162, 40, 161, 65, 152, 62, 143, 60, 134, 60.5]) + smooth([158, 36, 182, 36, 182, 60, 172, 58.4, 162, 61.5]), fill: HFILL, clip: E },
+    hMul(smooth([134, 58.5, 143, 58, 152, 60, 161, 63.5, 161, 68.5, 150, 65, 136, 63.5]) + smooth([161, 60, 170, 57, 180, 58.5, 180, 63, 170, 61.6, 161, 65]), 'rgba(80,100,170,0.55)', E),
+    hInk(EYES, { light: [0.2, 1], w: 3.2, thin: 0.9, taper: 5, gap: 1 }, 625),
+    hLine([137.5, 60.6, 145, 58.4, 153, 60.6, 160.5, 64.6], 2.8, 626, 0.12, 0.15),
+    hLine([162, 61.2, 170, 58, 177.5, 59.4], 2.4, 627, 0.15, 0.25),
+    // small round black nose at the tip
+    { d: NOSE.d, fill: radLit(182.5, 77.5, 6, 0, '#5d5966', 1, '#0d0d12') },
+    hInk(NOSE, { w: 1.5, thin: 0.6, taper: 2 }, 629),
+    { d: smooth(oval(181, 75.8, 1.6, 1, -10, 630, 0.1)), fill: 'rgba(255,255,255,0.9)' },
+
+    // near arm swinging back, overlapping the body
+    hMul(shift(ARM_NEAR.d, 2, 2.5), 'rgba(10,20,90,0.45)', BODY.d),
+    { d: ARM_NEAR.d, fill: lin(116, 117, 86, 122, 0, '#ffd8ac', 1, '#e8a878') },
+    hMul(shift(ARM_NEAR.d, 1, 1.4), 'rgba(200,110,70,0.5)', ARM_NEAR.d),
+    hInk(ARM_NEAR, { w: 2.4, thin: 0.6, taper: 3 }, 631),
+    ...glove(82, 120.5, 200, 1, 633),
   ]
   return { viewW: 220, viewH: 200, paths }
 }
@@ -737,59 +839,106 @@ export function mushroomKingdom(): Art {
 
 // ---- Hungry yellow eater in a neon maze ------------------------------------------
 export function glouton(open = 36): Art {
+  const LT: Pt = [-0.7, -0.72]
   const a = (open * Math.PI) / 180
-  const R = 50
-  const c = 60
-  const ux = c + R * Math.cos(a)
-  const uy = c - R * Math.sin(a)
-  const ly = c + R * Math.sin(a)
-  const pie = `M${c + 4} ${c}L${ux.toFixed(2)} ${uy.toFixed(2)}A${R} ${R} 0 1 0 ${ux.toFixed(2)} ${ly.toFixed(2)}Z`
+  // squash-and-stretch chomp: wider than tall, leaning into the bite
+  const cx = 60
+  const cy = 62
+  const rx = 53
+  const ry = 47.5
+  const pts: number[] = []
+  const r = rng(91)
+  const steps = 13
+  for (let i = 0; i <= steps; i++) {
+    const t = a + ((2 * Math.PI - 2 * a) * i) / steps
+    const k = 1 + (r() - 0.5) * 0.025 + (Math.cos(t) < 0 ? 0.015 : 0)
+    pts.push(cx + rx * k * Math.cos(t), cy - ry * k * Math.sin(t) * (Math.cos(t) > 0 ? 0.97 : 1))
+  }
+  const up: Pt = [pts[0], pts[1]]
+  const lo: Pt = [pts[pts.length - 2], pts[pts.length - 1]]
+  // fleshy curved lips meeting at the mouth corner
+  const corner: Pt = [cx + 5, cy + 1]
+  const lips = [
+    lo[0] - 4, lo[1] - 3, lo[0] - 18, lo[1] - 9, corner[0] + 14, corner[1] + 5, corner[0], corner[1], corner[0], corner[1],
+    corner[0] + 15, corner[1] - 5.5, up[0] - 18, up[1] + 9, up[0] - 4, up[1] + 3,
+  ]
+  const BODY = form([up[0], up[1], up[0], up[1], ...pts.slice(2, -2), lo[0], lo[1], lo[0], lo[1], ...lips], 701, 0.35, 1.2)
+  const B = BODY.d
+  const LIPS_IN = inkLine([lo[0] - 3, lo[1] - 3.5, lo[0] - 18, lo[1] - 10, corner[0] + 13, corner[1] + 4.5, corner[0] + 1, corner[1], corner[0] + 15, corner[1] - 5, up[0] - 18, up[1] + 8.5, up[0] - 3, up[1] + 3.5], 7, 703, 0.08, 0.08, 0.2)
+  const EYE = form(oval(61, 35, 7.8, 9.6, -8, 705, 0.06), 705, 0.2, 0.8)
   const paths: VectorPath[] = [
     ...castShadow(68, 117, 42, 4.5, 0.7, '0,0,20'),
-    { d: 'M-2 40 H10 M-6 60 H6 M-2 80 H10', stroke: 'rgba(255,230,0,0.55)', sw: 3.5 },
-    { d: pie, fill: radLit(60, 60, 54, 0, '#fff7a8', 0.45, '#ffe11a', 0.85, '#f2b200', 1, '#c98a00') },
-    // inner lips: the cut faces of the mouth, a touch darker
-    { d: `M${c + 4} ${c}L${ux.toFixed(2)} ${uy.toFixed(2)}`, stroke: '#d99100', sw: 5 },
-    { d: `M${c + 4} ${c}L${ux.toFixed(2)} ${ly.toFixed(2)}`, stroke: '#b97400', sw: 5 },
-    core(pie, 30, 24, 96, 104, '150,60,0', 0.6, 0.35),
-    rim(pie, 4, 40, 40, 100, 110, '90,140,255', 0.95, 0.55),
-    { d: pie, stroke: INK, sw: 4.5 },
-    gloss('M22 44 Q30 22 54 15', 5, 0.8),
-    { d: circ(30, 32, 3), fill: 'rgba(255,255,255,0.8)' },
-    // eye
-    { d: ell(62, 30, 7.5, 9), fill: radLit(62, 30, 10, 0, '#ffffff', 1, '#d9dee8'), stroke: INK, sw: 2.6 },
-    { d: ell(64.5, 31, 4, 5.4), fill: INK },
-    { d: circ(66, 28.5, 1.8), fill: '#ffffff' },
-    { d: circ(63, 34, 0.8), fill: 'rgba(255,255,255,0.8)' },
-    { d: 'M52 17 Q61 13 72 18', stroke: INK, sw: 3 },
+    { d: inkLine([-2, 40, 6, 40.4, 13, 40], 3.2, 707, 0.5, 0.15) + inkLine([-6, 60, 3, 60.4, 9, 60], 3.2, 708, 0.5, 0.15) + inkLine([-2, 80, 6, 80.4, 13, 80], 3.2, 709, 0.5, 0.15), fill: 'rgba(255,230,0,0.6)' },
+    { d: B, fill: radLit(60, 60, 58, 0, '#fff6a0', 0.45, '#ffe11a', 0.85, '#f2b200', 1, '#c98a00') },
+    ...within(B, [...dab(38, 30, 22, 14, '255,252,215', 0.6, 1, -20), ...dab(48, 98, 30, 12, '230,130,0', 0.4, 2), ...dab(96, 38, 10, 7, '255,240,150', 0.35, 3)]),
+    // lip thickness: the inside of the mouth, darker and warmer
+    { d: LIPS_IN, fill: '#c76a00', clip: B },
+    { d: inkLine([corner[0] + 3, corner[1] - 1, corner[0] + 15, corner[1] - 5.2, up[0] - 18, up[1] + 8.2], 1.4, 711, 0.3, 0.5), fill: 'rgba(255,230,150,0.7)', clip: B },
+    // cel shadow crescent on the lower-left, then hatching
+    { d: smooth([10, 52, 14, 82, 34, 104, 64, 112, 96, 102, 100, 114, 60, 122, 10, 110, 0, 70]), fill: 'rgba(200,90,0,0.5)', clip: B, blend: 'multiply' },
+    { d: hatch([14, 74, 22, 92, 36, 104], 7, 6, 300, 0.75, 713), fill: 'rgba(120,40,0,0.55)', clip: B },
+    rimLight(B, lin(40, 40, 100, 110, 0, T, 0.55, T, 1, 'rgba(90,140,255,0.95)'), 3.6),
+    { d: grain(4, 10, 112, 104, 300, 715, 0.2, 0.5), fill: 'rgba(120,60,0,0.2)', clip: B, blend: 'multiply' },
+    { d: inkRing(BODY, { light: LT, w: 4.8, thin: 1.1, taper: 8, gap: -1.5 }, 717), fill: INK },
+    { d: inkLine([22, 46, 28, 28, 46, 17, 58, 14.5], 4.2, 719, 0.3, 0.5), fill: 'rgba(255,255,255,0.8)' },
+    { d: circ(29, 33, 2.6), fill: 'rgba(255,255,255,0.85)' },
+    // eye with a greedy, determined brow
+    { d: EYE.d, fill: radLit(61, 35, 10, 0, '#ffffff', 1, '#d9dee8') },
+    { d: smooth(oval(64.4, 36.4, 4, 5.6, -8, 721, 0.06)), fill: INK, clip: EYE.d },
+    { d: smooth([50, 23, 74, 28, 74, 32.5, 61, 31, 50, 28.5]), fill: 'rgba(120,120,170,0.45)', clip: EYE.d, blend: 'multiply' },
+    { d: circ(66, 34, 1.7) + circ(63, 39.4, 0.8), fill: '#ffffff', clip: EYE.d },
+    { d: inkRing(EYE, { light: [0.2, 1], w: 2.6, thin: 0.7, taper: 3 }, 723), fill: INK },
+    { d: inkLine([49, 22, 59.5, 20.5, 72, 25.5], 3.6, 725, 0.2, 0.15), fill: INK },
   ]
   return { viewW: 124, viewH: 124, paths }
 }
 
 export function ghost(color = '#ff3b3b', look = -1): Art {
-  let skirt = 'M90 52 L90 96'
-  const feet = 4
-  const fw = 78 / feet
-  for (let i = 0; i < feet; i++) {
-    const x0 = 90 - i * fw
-    skirt += `Q${(x0 - fw * 0.15).toFixed(1)} ${110} ${(x0 - fw * 0.5).toFixed(1)} ${108}Q${(x0 - fw * 0.85).toFixed(1)} ${106} ${(x0 - fw).toFixed(1)} ${i === feet - 1 ? 96 : 94}`
+  const LT: Pt = [-0.7, -0.72]
+  const rgbOf = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(',')
+  const seed = parseInt(color.slice(1, 3), 16)
+  // wavy skirt trailing away from the direction of travel
+  const BODY = form([
+    50, 11.5, 70, 16, 84.5, 31, 90.5, 52, 91.5, 76, 93, 96, 95, 106, 95, 106, 85.5, 102, 79, 106.5, 73, 113, 73, 113,
+    66.5, 104.5, 58, 102.5, 52, 112, 52, 112, 46, 103.5, 38, 102, 31.5, 111.5, 31.5, 111.5, 25.5, 103, 17.5, 101, 10, 108.5, 10, 108.5,
+    11, 92, 12, 74, 13, 52, 19.5, 30, 32, 16,
+  ], 801 + seed, 0.45, 1.2)
+  const B = BODY.d
+  const ix = 4.6 * look
+  const eye = (x: number, y: number, s: number, k: number): VectorPath[] => {
+    const cv = form(oval(x, y, 11 * s, 14 * s, look * 6, 811 + k + seed, 0.06), 811 + k + seed, 0.2, 0.8)
+    const E = cv.d
+    const px = x + ix * 1.2
+    return [
+      { d: E, fill: radLit(x, y, 16, 0, '#ffffff', 1, '#d6dceb') },
+      { d: smooth(oval(px, y + 3, 6.6 * s, 7 * s, 0, 821 + k, 0.05)), fill: radLit(px, y + 2, 9, 0, '#7f98ff', 1, '#1c2fc4'), clip: E },
+      { d: smooth(oval(px + look * 0.6, y + 3.5, 3.3 * s, 3.6 * s, 0, 831 + k, 0.06)), fill: INK, clip: E },
+      { d: circ(px + 2, y, 1.9 * s), fill: '#ffffff', clip: E },
+      // a stern lid slanting toward the eater
+      { d: smooth(look < 0 ? [x - 14, y - 20, x + 14, y - 20, x + 14, y - 9 + k * 0.5, x - 14, y - 15] : [x - 14, y - 20, x + 14, y - 20, x + 14, y - 15, x - 14, y - 9 + k * 0.5]), fill: radLit(51, 40, 60, 0, shade(color, 0.3), 1, color), clip: E },
+      { d: inkLine(look < 0 ? [x - 11, y - 13.8, x, y - 11.4, x + 11.5, y - 8.6] : [x - 11.5, y - 8.6, x, y - 11.4, x + 11, y - 13.8], 2.4, 841 + k, 0.15, 0.15), fill: INK },
+      { d: inkRing(cv, { light: [0.2, 1], w: 2.4, thin: 0.7, taper: 3 }, 851 + k), fill: INK },
+    ]
   }
-  const body = skirt + 'L12 52 A39 39 0 0 1 90 52 Z'
-  const ix = 4.5 * look
   return {
     viewW: 102,
     viewH: 120,
     paths: [
-      ...castShadow(57, 116, 36, 3.5, 0.7, '0,0,20'),
-      { d: body, fill: radLit(51, 52, 62, 0, shade(color, 0.45), 0.5, color, 1, shade(color, -0.45)) },
-      core(body, 20, 20, 90, 110, '60,0,40', 0.6, 0.35),
-      rim(body, 4, 40, 40, 96, 110, '90,140,255', 0.95, 0.55),
-      { d: body, stroke: INK, sw: 4.5 },
-      gloss('M20 46 Q24 26 42 18', 4.5, 0.6),
-      { d: ell(36, 50, 11, 14) + ell(64, 50, 11, 14), fill: radLit(50, 48, 30, 0, '#ffffff', 1, '#d6dceb'), stroke: INK, sw: 2.6 },
-      { d: circ(36 + ix, 53, 6.4) + circ(64 + ix, 53, 6.4), fill: radLit(50, 52, 20, 0, '#6f8bff', 1, '#1c2fc4') },
-      { d: circ(36 + ix * 1.1, 53.5, 3.2) + circ(64 + ix * 1.1, 53.5, 3.2), fill: INK },
-      { d: circ(38 + ix, 50.5, 1.8) + circ(66 + ix, 50.5, 1.8), fill: '#ffffff' },
+      ...castShadow(55, 116, 36, 3.5, 0.7, '0,0,20'),
+      { d: B, fill: radLit(51, 52, 64, 0, shade(color, 0.45), 0.5, color, 1, shade(color, -0.45)) },
+      ...within(B, [
+        ...dab(34, 30, 18, 12, '255,255,255', 0.35, 1 + seed, -20),
+        ...dab(70, 92, 20, 14, rgbOf(shade(color, -0.55)), 0.45, 2 + seed),
+        ...dab(22, 84, 8, 16, rgbOf(shade(color, 0.25)), 0.3, 3 + seed),
+      ]),
+      { d: smooth([10, 60, 16, 92, 36, 100, 60, 99, 90, 92, 96, 114, 10, 114]), fill: 'rgba(80,0,60,0.45)', clip: B, blend: 'multiply' },
+      { d: hatch([76, 98, 84, 96, 92, 92], 5, 5, 250, 0.7, 861 + seed), fill: 'rgba(40,0,30,0.55)', clip: B },
+      rimLight(B, lin(40, 40, 96, 110, 0, T, 0.55, T, 1, 'rgba(90,140,255,0.95)'), 3.6),
+      { d: grain(6, 8, 92, 106, 220, 871 + seed, 0.2, 0.5), fill: 'rgba(40,0,30,0.2)', clip: B, blend: 'multiply' },
+      { d: inkRing(BODY, { light: LT, w: 4.4, thin: 1, taper: 7, gap: -1.5 }, 881 + seed), fill: INK },
+      { d: inkLine([20, 50, 24, 30, 40, 19], 4, 891 + seed, 0.3, 0.5), fill: 'rgba(255,255,255,0.6)' },
+      ...eye(36, 50, 1, 0),
+      ...eye(65, 50, 0.96, 2),
     ],
   }
 }
@@ -988,33 +1137,83 @@ export function blockWorld(): Art {
 
 // ---- Suspicious space crewmate ----------------------------------------------
 export function crewmate(color = '#e0283f'): Art {
-  const dark = shade(color, -0.42)
-  const BODY = 'M42 146 L42 74 Q42 22 90 22 Q138 22 138 74 L138 146 Q138 162 122 162 L108 162 Q97 162 97 150 L97 140 L83 140 L83 150 Q83 162 72 162 L58 162 Q42 162 42 146 Z'
+  const LT: Pt = [-0.72, -0.69] // the bright star, upper-left
+  const CY = 'rgba(120,230,255,0.95)'
+  const lite = shade(color, 0.35)
+  const dark = shade(color, -0.5)
+  const rgbOf = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(',')
+  const ink = (cv: Curve, o: InkOpts = {}, seed = 7): VectorPath => ({ d: inkRing(cv, { light: LT, ...o }, seed), fill: INK })
+  const line = (f: number[], w: number, seed = 3, t0 = 0.22, t1 = 0.32, col = INK): VectorPath => ({ d: inkLine(f, w, seed, t0, t1), fill: col })
+  const mul = (d: string, fill: string, clip: string): VectorPath => ({ d, fill, clip, blend: 'multiply' })
+  const sparkleD = (cx: number, cy: number, r: number) => {
+    const q = r * 0.18
+    return `M${cx} ${cy - r}Q${cx + q} ${cy - q} ${cx + r} ${cy}Q${cx + q} ${cy + q} ${cx} ${cy + r}Q${cx - q} ${cy + q} ${cx - r} ${cy}Q${cx - q} ${cy - q} ${cx} ${cy - r}Z`
+  }
+
+  // one bean silhouette: dome, slightly leaning body, two little legs mid-float
+  const BODY = form([
+    87, 20.5, 110, 23.5, 127, 37, 136.5, 60, 139.5, 92, 139.5, 120, 138, 140, 136, 155, 130, 166, 118, 170.5, 106.5, 167, 101.5, 155,
+    99, 142, 94, 133.5, 94, 133.5, 87.5, 139, 81.5, 150, 72.5, 158.5, 59, 159.5, 50, 150, 47.5, 134, 45.5, 110, 44, 80, 48.5, 50, 61, 30,
+  ], 601, 0.5, 1.4)
+  const Bd = BODY.d
+  const PACK = form([50, 66, 34, 63.5, 22, 70, 17, 92, 18, 120, 24.5, 136.5, 38, 141.5, 52, 136], 603, 0.45, 1.2)
+  const VISOR = form([79, 49.5, 99, 46, 120, 45.5, 140, 50, 152.5, 62, 150.5, 78, 140, 86.5, 118, 88.5, 94, 88.5, 78, 83, 71.5, 70, 72.5, 57], 605, 0.35, 1)
+  const V = VISOR.d
+  const DROP = form([155, 25, 155, 25, 160, 35, 161.5, 41, 159.5, 47, 154, 48.5, 149, 45.5, 148.5, 40, 151, 33], 607, 0.2, 0.8)
+
   const paths: VectorPath[] = [
-    // backpack
-    { d: rrect(16, 70, 34, 70, 13), fill: lin(16, 0, 50, 0, 0, shade(color, 0.12), 1, dark), stroke: INK, sw: 4.5 },
-    gloss('M23 84 Q24 77 31 76', 3, 0.5),
-    core(rrect(16, 70, 34, 70, 13), 16, 70, 50, 140, '40,0,40', 0.5, 0.3),
+    // backpack, partly hidden behind the body
+    { d: PACK.d, fill: lin(16, 70, 52, 140, 0, lite, 0.45, color, 1, dark) },
+    ...within(PACK.d, [...dab(28, 80, 9, 10, '255,220,220', 0.45, 1), ...dab(36, 130, 14, 8, rgbOf(dark), 0.5, 2)]),
+    mul(smooth([20, 112, 30, 128, 46, 134, 54, 140, 30, 146, 14, 130]), 'rgba(60,0,30,0.55)', PACK.d),
+    { d: hatch([24, 122, 30, 132, 40, 137], 5, 5, 300, 0.7, 609), fill: 'rgba(40,0,10,0.6)', clip: PACK.d },
+    line([24, 75, 22, 92, 23.5, 108], 1.6, 611, 0.3, 0.5, 'rgba(255,230,230,0.75)'),
+    ink(PACK, { w: 4, thin: 1, taper: 6 }, 613),
+
     // body
-    { d: BODY, fill: lin(42, 0, 138, 0, 0, shade(color, 0.28), 0.45, color, 1, shade(color, -0.3)) },
-    { d: 'M120 34 Q138 50 138 74 L138 146 Q138 162 122 162 L108 162 Q118 150 118 128 L120 60 Q122 44 120 34 Z', fill: 'rgba(40,0,20,0.28)' },
-    { d: 'M42 128 Q90 140 138 128 L138 146 Q138 162 122 162 L108 162 Q97 162 97 150 L97 140 L83 140 L83 150 Q83 162 72 162 L58 162 Q42 162 42 146 Z', fill: 'rgba(40,0,20,0.22)' },
-    core(BODY, 50, 30, 140, 150, '40,0,40', 0.6, 0.38),
-    rim(BODY, 4, 70, 60, 140, 160, '120,230,255', 0.95, 0.55),
-    { d: BODY, stroke: INK, sw: 5 },
-    { d: 'M83 140 L83 128', stroke: 'rgba(27,23,18,0.5)', sw: 2.5 },
-    gloss('M52 64 Q56 36 82 30', 5, 0.6),
-    { d: circ(60, 44, 2.6), fill: 'rgba(255,255,255,0.7)' },
-    // visor
-    { d: 'M86 46 L126 46 Q148 46 148 66 Q148 86 126 86 L86 86 Q66 86 66 66 Q66 46 86 46 Z', fill: lin(0, 46, 0, 86, 0, '#e3f7ff', 0.45, '#9fdcf3', 1, '#3d8db5'), stroke: INK, sw: 4.5 },
-    { d: 'M72 74 Q100 84 142 74 Q140 84 126 86 L86 86 Q74 86 72 74 Z', fill: 'rgba(20,70,110,0.35)' },
-    { d: 'M78 78 Q104 86 140 76 Q138 84 126 86 L86 86 Q78 86 78 78 Z', fill: 'rgba(120,240,255,0.55)', blend: 'screen' },
-    rim('M86 46 L126 46 Q148 46 148 66 Q148 86 126 86 L86 86 Q66 86 66 66 Q66 46 86 46 Z', 3, 90, 50, 140, 90, '160,245,255', 0.9, 0.55),
-    { d: 'M86 55 L118 55', stroke: '#ffffff', sw: 6 },
-    { d: circ(129, 55, 2.6), fill: '#ffffff' },
-    // sweat drop
-    { d: 'M150 30 Q156 40 156 44 Q156 50 150 50 Q144 50 144 44 Q144 40 150 30 Z', fill: lin(0, 30, 0, 50, 0, '#e6f8ff', 1, '#6cc6f0'), stroke: INK, sw: 2.6 },
-    { d: circ(148, 44, 1.4), fill: '#ffffff' },
+    { d: Bd, fill: lin(48, 24, 138, 160, 0, lite, 0.42, color, 1, shade(color, -0.25)) },
+    ...within(Bd, [
+      ...dab(70, 44, 22, 18, '255,190,190', 0.45, 3),
+      ...dab(58, 100, 10, 30, '255,150,150', 0.3, 4),
+      ...dab(124, 120, 16, 34, rgbOf(dark), 0.45, 5),
+      ...dab(96, 152, 30, 8, '60,0,40', 0.35, 6),
+      ...dab(132, 140, 6, 14, '120,200,255', 0.25, 7),
+    ]),
+    // the backpack casts a soft shadow onto the body edge
+    mul(shift(PACK.d, 4, 2), 'rgba(90,0,40,0.4)', Bd),
+    // cel form shadow: a crescent on the right and the underside, then hatching
+    mul(smooth([128, 40, 138, 70, 140, 110, 136, 148, 126, 164, 106, 160, 100, 146, 116, 140, 124, 116, 126, 84, 124, 56]), 'rgba(110,0,40,0.5)', Bd),
+    mul(smooth([46, 128, 70, 136, 94, 138, 120, 134, 140, 128, 140, 170, 46, 170]), 'rgba(90,0,50,0.4)', Bd),
+    { d: hatch([126, 104, 130, 124, 128, 142], 6, 7, 160, 0.8, 615) + hatch([86, 139, 94, 134.5, 100, 141], 5, 5, 250, 0.7, 616), fill: 'rgba(50,0,20,0.6)', clip: Bd },
+    rimLight(Bd, lin(70, 60, 140, 160, 0, T, 0.62, T, 1, CY), 2.6),
+    // suit fabric: soft folds at the waist and knees, brush grain
+    line([52, 124, 70, 128.5, 86, 129.5], 1, 617, 0.3, 0.3, 'rgba(70,0,20,0.4)'),
+    line([58, 146, 65, 143, 73, 144], 1, 618, 0.3, 0.3, 'rgba(70,0,20,0.5)'),
+    line([108, 152, 116, 148, 126, 150], 1, 619, 0.3, 0.3, 'rgba(70,0,20,0.5)'),
+    { d: strokesIn(44, 20, 96, 146, 140, 3.2, 75, 0.26, 620), fill: 'rgba(80,0,20,0.25)', clip: Bd },
+    { d: grain(40, 18, 102, 150, 380, 621, 0.18, 0.45), fill: 'rgba(40,0,20,0.2)', clip: Bd, blend: 'multiply' },
+    // leg split + body contour
+    line([94, 133.5, 94.5, 127, 96, 121], 2, 623, 0.1, 0.7),
+    ink(BODY, { w: 4.8, thin: 1.1, taper: 9, breaks: [0.45], gap: -2, heavy: [[94, 134, 12, 1.4], [118, 170, 20, 1.2]] }, 625),
+    { d: inkLine([55, 62, 58, 44, 72, 31], 3.2, 627, 0.3, 0.5), fill: 'rgba(255,235,235,0.75)' },
+    { d: circ(78, 28, 1.6), fill: 'rgba(255,255,255,0.85)' },
+
+    // visor: deep glass, sky reflection, window streaks, star glint, rim
+    mul(shift(V, 3, 4), 'rgba(80,0,30,0.5)', Bd),
+    { d: V, fill: lin(0, 46, 0, 89, 0, '#dff6ff', 0.35, '#8fd3ef', 0.7, '#3a86b4', 1, '#1d4f7c') },
+    ...within(V, [...dab(98, 56, 22, 8, '255,255,255', 0.55, 8, -4), ...dab(140, 80, 14, 6, '20,50,110', 0.5, 9)]),
+    { d: smooth([72, 74, 96, 80, 124, 81, 152, 72, 150, 92, 72, 92]), fill: 'rgba(20,50,100,0.45)', clip: V, blend: 'multiply' },
+    { d: smooth([76, 80, 100, 85, 128, 85, 148, 78, 150, 82, 128, 90, 96, 90, 74, 84]), fill: 'rgba(130,240,255,0.55)', clip: V, blend: 'screen' },
+    { d: inkLine([84, 56.5, 100, 53.5, 120, 53.5, 132, 55.5], 4.4, 629, 0.25, 0.4) + inkLine([139, 57, 143, 60.5, 145.5, 65], 2.4, 630, 0.3, 0.4), fill: 'rgba(255,255,255,0.95)', clip: V },
+    { d: inkLine([88, 63, 104, 61.5, 116, 62], 1.4, 631, 0.3, 0.5), fill: 'rgba(255,255,255,0.6)', clip: V },
+    { d: sparkleD(126, 64.5, 4.6), fill: '#ffffff', clip: V },
+    { d: circ(126, 64.5, 1.2) + circ(80, 74, 1), fill: '#ffffff', clip: V },
+    { d: inkRing(VISOR, { light: [-0.4, -1], w: 4, thin: 1.2, taper: 6, gap: 1 }, 633), fill: INK },
+
+    // nervous sweat drop
+    { d: DROP.d, fill: lin(148, 25, 162, 49, 0, '#f2fcff', 0.5, '#9fdcf5', 1, '#4aa6d8') },
+    { d: smooth(oval(152.6, 40.5, 1.4, 2.6, 10, 635, 0.1)), fill: '#ffffff' },
+    ink(DROP, { w: 2, thin: 0.6, taper: 3 }, 637),
   ]
   return { viewW: 170, viewH: 184, paths }
 }

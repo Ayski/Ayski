@@ -1,4 +1,4 @@
-import { CARD_ASPECT, type Background, type DrawStroke, type Layer, type VectorShadow } from '../types'
+import { CARD_ASPECT, type Background, type DrawStroke, type Layer, type VectorPath, type VectorShadow } from '../types'
 import type { Art } from './art/kit'
 import { chipArt, contactlessArt, type Metal } from './art/cardparts'
 
@@ -184,7 +184,33 @@ export interface VecOpts {
 const DEFAULT_SHADOW: VectorShadow = { color: 'rgba(0,0,0,0.35)', blur: 8, dx: 0, dy: 6 }
 
 // A vector illustration centred at (x, y), `width` as a fraction of the card.
+// Store path strings that repeat (a silhouette reused as fill, clip and ink)
+// once in `defs`, referenced as "#i". Keeps templates and saved projects small.
+function intern(paths: VectorPath[]): { paths: VectorPath[]; defs?: string[] } {
+  const count = new Map<string, number>()
+  const bump = (d?: string) => d && d.length >= 64 && count.set(d, (count.get(d) ?? 0) + 1)
+  for (const p of paths) {
+    bump(p.d)
+    bump(p.clip)
+  }
+  const index = new Map<string, number>()
+  const defs: string[] = []
+  const ref = (d: string) => {
+    if ((count.get(d) ?? 0) < 2) return d
+    let i = index.get(d)
+    if (i === undefined) {
+      i = defs.push(d) - 1
+      index.set(d, i)
+    }
+    return `#${i}`
+  }
+  if (![...count.values()].some((n) => n > 1)) return { paths }
+  const out = paths.map((p) => (p.clip ? { ...p, d: ref(p.d), clip: ref(p.clip) } : { ...p, d: ref(p.d) }))
+  return { paths: out, defs }
+}
+
 export function vec(art: Art, x: number, y: number, width: number, o: VecOpts = {}): Layer {
+  const { paths, defs } = intern(art.paths)
   return {
     id: lid('v'),
     type: 'vector',
@@ -199,7 +225,8 @@ export function vec(art: Art, x: number, y: number, width: number, o: VecOpts = 
     viewW: art.viewW,
     viewH: art.viewH,
     width,
-    paths: art.paths,
+    paths,
+    defs,
     sketch: o.sketch ?? false,
     shadow: o.shadow === true ? DEFAULT_SHADOW : o.shadow || undefined,
   } as Layer

@@ -26,7 +26,7 @@ export const GAME_TEMPLATES: Template[] = [
     layers: [
       backdrop(hillZone()),
       backdrop(goldRings()),
-      vec(hedgehog(), 0.5, 0.476, 0.5, { shadow: { color: 'rgba(0,30,80,0.28)', blur: 6, dx: 3, dy: 4 } }),
+      vec(hedgehog(), 0.5, 0.47, 0.5, { rotation: 5, shadow: { color: 'rgba(0,30,80,0.28)', blur: 6, dx: 3, dy: 4 } }),
     ],
   },
   {

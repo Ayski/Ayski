@@ -455,16 +455,21 @@ function paint(ctx: CanvasRenderingContext2D, p: Paint): string | CanvasGradient
   return g
 }
 
+// Resolve a "#i" reference into the layer's shared path table.
+function deref(l: VectorLayer, d: string): string {
+  return d.charCodeAt(0) === 35 ? (l.defs?.[Number(d.slice(1))] ?? '') : d
+}
+
 function paintPaths(ctx: CanvasRenderingContext2D, l: VectorLayer) {
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
   const base = ctx.globalAlpha
   for (const p of l.paths) {
-    const path = toPath(p.d)
+    const path = toPath(deref(l, p.d))
     const scoped = Boolean(p.clip || p.blend)
     if (scoped) {
       ctx.save()
-      if (p.clip) ctx.clip(toPath(p.clip))
+      if (p.clip) ctx.clip(toPath(deref(l, p.clip)))
       if (p.blend) ctx.globalCompositeOperation = p.blend
     }
     ctx.globalAlpha = base * (p.alpha ?? 1)

@@ -135,6 +135,9 @@ export interface VectorLayer extends BaseLayer {
   paths: VectorPath[]
   sketch?: boolean // hand-drawn double ink line
   shadow?: VectorShadow // soft drop shadow under the whole illustration
+  // Shared path strings: a path's `d` or `clip` written "#i" means defs[i]
+  // (silhouettes reused by shading passes are stored once).
+  defs?: string[]
 }
 
 export type Layer = ImageLayer | TextLayer | ShapeLayer | DrawLayer | VectorLayer

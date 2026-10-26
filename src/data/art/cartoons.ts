@@ -18,12 +18,12 @@ function inside(clip: string, fill: Paint, blend: GlobalCompositeOperation = 'mu
 }
 
 // Rim light: the inner half of a gradient stroke along the contour, screened.
-function rimLight(shape: string, paint: Paint, w: number): VectorPath {
+export function rimLight(shape: string, paint: Paint, w: number): VectorPath {
   return { d: shape, stroke: paint, sw: w * 2, clip: shape, blend: 'screen' }
 }
 
 // Translate a path (absolute commands are offset, relative ones kept).
-function shift(d: string, dx: number, dy: number): string {
+export function shift(d: string, dx: number, dy: number): string {
   const tok = d.match(/[a-zA-Z]|-?(?:\d+\.?\d*|\.\d+)/g) ?? []
   const arity: Record<string, number> = { M: 2, L: 2, T: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, A: 7, Z: 0 }
   let out = ''
@@ -54,10 +54,50 @@ function shift(d: string, dx: number, dy: number): string {
   return out
 }
 
+// Drop samples that sit within `tol` of the line through their kept
+// neighbours (Ramer–Douglas–Peucker). Doubled points mark sharp corners and
+// are always kept. Hand-drawn strokes are densely sampled; this keeps the
+// shape and cuts the path data several-fold.
+function simplify(P: [number, number][], tol: number): [number, number][] {
+  const n = P.length
+  if (n < 4) return P
+  const keep = new Uint8Array(n)
+  keep[0] = keep[n - 1] = 1
+  for (let i = 1; i < n; i++) if (P[i][0] === P[i - 1][0] && P[i][1] === P[i - 1][1]) keep[i] = keep[i - 1] = 1
+  const rdp = (a: number, b: number) => {
+    let far = -1
+    let dmax = tol
+    const [ax, ay] = P[a]
+    const dx = P[b][0] - ax
+    const dy = P[b][1] - ay
+    const len = Math.hypot(dx, dy) || 1
+    for (let i = a + 1; i < b; i++) {
+      const d = Math.abs((P[i][0] - ax) * dy - (P[i][1] - ay) * dx) / len
+      if (d > dmax) {
+        dmax = d
+        far = i
+      }
+    }
+    if (far >= 0) {
+      keep[far] = 1
+      rdp(a, far)
+      rdp(far, b)
+    }
+  }
+  let a = 0
+  for (let i = 1; i < n; i++) {
+    if (!keep[i]) continue
+    rdp(a, i)
+    a = i
+  }
+  return P.filter((_, i) => keep[i])
+}
+
 // Smooth curve through points (Catmull-Rom converted to cubic Béziers).
-function smooth(pts: number[], close = true): string {
-  const P: [number, number][] = []
+export function smooth(pts: number[], close = true): string {
+  let P: [number, number][] = []
   for (let i = 0; i < pts.length; i += 2) P.push([pts[i], pts[i + 1]])
+  P = simplify(P, 0.06)
   const n = P.length
   const at = (i: number) => (close ? P[(i + n) % n] : P[Math.max(0, Math.min(n - 1, i))])
   let d = `M${q2(P[0][0])} ${q2(P[0][1])}`
@@ -138,155 +178,707 @@ function sphere(x: number, y: number, r: number, lit: string, mid: string, dark:
 // Union of circles / ellipses (all wound the same way, so they also work as a clip).
 const union = (parts: string[]) => parts.join('')
 
+// ---- Hand-drawn figure kit ---------------------------------------------------
+// Characters are authored as point lists (a few hand-placed points per form,
+// deliberately asymmetric) that become Catmull-Rom cubic Béziers. Every contour
+// gets a slow hand wobble, and the ink is a FILLED tapered stroke whose width
+// follows the light: heavy on the shadow side, thin and broken on the lit side.
+// A repeated point in a list marks a sharp corner.
+export type Pt = [number, number]
+
+export interface Curve {
+  p: Pt[] // dense, wobbled samples
+  c: boolean[] // corner flags
+  d: string // cubic-Bézier path
+}
+
+function toPts(f: number[] | Pt[]): Pt[] {
+  if (!f.length || Array.isArray(f[0])) return (f as Pt[]).map((p) => [p[0], p[1]] as Pt)
+  const o: Pt[] = []
+  const a = f as number[]
+  for (let i = 0; i + 1 < a.length; i += 2) o.push([a[i], a[i + 1]])
+  return o
+}
+
+// Sample a Catmull-Rom curve through the points (cubic Bézier segments).
+function sampleCurve(f: number[] | Pt[], closed: boolean, step = 1.5): { p: Pt[]; c: boolean[]; u: number[] } {
+  const P = toPts(f)
+  const n = P.length
+  const same = (i: number, j: number) => {
+    const a = P[(i + n) % n]
+    const b = P[(j + n) % n]
+    return Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6
+  }
+  const at = (i: number) => (closed ? P[(i + n) % n] : P[Math.max(0, Math.min(n - 1, i))])
+  const p: Pt[] = []
+  const c: boolean[] = []
+  const u: number[] = []
+  const segs = closed ? n : n - 1
+  for (let i = 0; i < segs; i++) {
+    if (same(i, i + 1)) continue
+    const a = at(i - 1)
+    const b = at(i)
+    const cc = at(i + 1)
+    const e = at(i + 2)
+    const c1: Pt = [b[0] + (cc[0] - a[0]) / 6, b[1] + (cc[1] - a[1]) / 6]
+    const c2: Pt = [cc[0] - (e[0] - b[0]) / 6, cc[1] - (e[1] - b[1]) / 6]
+    const m = Math.max(2, Math.ceil(Math.hypot(cc[0] - b[0], cc[1] - b[1]) / step))
+    for (let k = 0; k < m; k++) {
+      const t = k / m
+      const s = 1 - t
+      p.push([
+        s * s * s * b[0] + 3 * s * s * t * c1[0] + 3 * s * t * t * c2[0] + t * t * t * cc[0],
+        s * s * s * b[1] + 3 * s * s * t * c1[1] + 3 * s * t * t * c2[1] + t * t * t * cc[1],
+      ])
+      c.push(k === 0 && (same(i, i - 1) || (!closed && i === 0)))
+      u.push(i + t)
+    }
+  }
+  if (!closed) {
+    p.push(P[n - 1])
+    c.push(true)
+    u.push(n - 1)
+  }
+  return { p, c, u }
+}
+
+function normals(p: Pt[], closed: boolean): Pt[] {
+  const n = p.length
+  return p.map((_, i) => {
+    const a = closed ? p[(i - 1 + n) % n] : p[Math.max(0, i - 1)]
+    const b = closed ? p[(i + 1) % n] : p[Math.min(n - 1, i + 1)]
+    const dx = b[0] - a[0]
+    const dy = b[1] - a[1]
+    const l = Math.hypot(dx, dy) || 1
+    return [-dy / l, dx / l] as Pt
+  })
+}
+
+function arcLen(p: Pt[]): number[] {
+  const s = [0]
+  for (let i = 1; i < p.length; i++) s.push(s[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]))
+  return s
+}
+
+// Slow hand tremor along the normal (periodic on closed curves: no seam).
+function wobble(p: Pt[], amp: number, seed: number, closed: boolean): Pt[] {
+  if (!amp || p.length < 3) return p
+  const r = rng(seed)
+  const s = arcLen(p)
+  const L = s[s.length - 1] + (closed ? Math.hypot(p[0][0] - p[p.length - 1][0], p[0][1] - p[p.length - 1][1]) : 0)
+  const per = (len: number) => (closed ? (2 * Math.PI * Math.max(1, Math.round(L / len))) / L : (2 * Math.PI) / len)
+  const f1 = per(22 + r() * 12)
+  const f2 = per(6 + r() * 4)
+  const p1 = r() * 6.28
+  const p2 = r() * 6.28
+  const N = normals(p, closed)
+  return p.map((q, i) => {
+    const o = amp * (0.68 * Math.sin(s[i] * f1 + p1) + 0.32 * Math.sin(s[i] * f2 + p2))
+    return [q[0] + N[i][0] * o, q[1] + N[i][1] * o] as Pt
+  })
+}
+
+// Cubic-Bézier path through dense samples (keeps flagged corners sharp).
+function curveD(p: Pt[], c: boolean[], closed: boolean, every = 2): string {
+  const keep: number[] = []
+  for (let i = 0; i < p.length; i++) if (i % every === 0 || c[i] || (!closed && i === p.length - 1)) keep.push(i)
+  const flat: number[] = []
+  keep.forEach((i) => {
+    flat.push(p[i][0], p[i][1])
+    if (c[i] && (closed || (i > 0 && i < p.length - 1))) flat.push(p[i][0], p[i][1])
+  })
+  return smooth(flat, closed)
+}
+
+// A closed hand-drawn form.
+export function form(f: number[] | Pt[], seed = 1, amp = 0.45, step = 1.5): Curve {
+  const s = sampleCurve(f, true, step)
+  const p = wobble(s.p, amp, seed, true)
+  return { p, c: s.c, d: curveD(p, s.c, true) }
+}
+
+// Hand-drawn oval (eyes, pupils, pores...) — 8 jittered points, never a true ellipse.
+export function oval(cx: number, cy: number, rx: number, ry: number, rot = 0, seed = 1, irr = 0.06): number[] {
+  const r = rng(seed)
+  const out: number[] = []
+  const cr = Math.cos((rot * Math.PI) / 180)
+  const sr = Math.sin((rot * Math.PI) / 180)
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + (r() - 0.5) * 0.25
+    const k = 1 + (r() - 0.5) * 2 * irr
+    const x = Math.cos(a) * rx * k
+    const y = Math.sin(a) * ry * k
+    out.push(cx + x * cr - y * sr, cy + x * sr + y * cr)
+  }
+  return out
+}
+
+// Move / rotate / scale a flat point list (author parts once, place them anywhere).
+export function place(f: number[], dx: number, dy: number, rot = 0, sx = 1, sy = sx): number[] {
+  const c = Math.cos((rot * Math.PI) / 180)
+  const s = Math.sin((rot * Math.PI) / 180)
+  const o: number[] = []
+  for (let i = 0; i + 1 < f.length; i += 2) {
+    const x = f[i] * sx
+    const y = f[i + 1] * sy
+    o.push(dx + x * c - y * s, dy + x * s + y * c)
+  }
+  return o
+}
+
+const smoothstep = (t: number) => {
+  const x = Math.max(0, Math.min(1, t))
+  return x * x * (3 - 2 * x)
+}
+
+// Filled polygon around a centreline with a width per sample.
+function ribbon(p: Pt[], w: number[], N: Pt[]): string {
+  const L: number[] = []
+  const R: number[] = []
+  p.forEach((q, i) => {
+    L.push(q[0] + (N[i][0] * w[i]) / 2, q[1] + (N[i][1] * w[i]) / 2)
+    R.push(q[0] - (N[i][0] * w[i]) / 2, q[1] - (N[i][1] * w[i]) / 2)
+  })
+  const back: number[] = []
+  for (let i = R.length - 2; i >= 0; i -= 2) back.push(R[i], R[i + 1])
+  const a = smooth(L, false)
+  const b = smooth(back, false).replace(/^M/, 'L')
+  return a + b + 'Z'
+}
+
+export interface InkOpts {
+  w?: number // heaviest width (shadow side)
+  thin?: number // lightest width (lit side)
+  light?: Pt // direction the key light comes FROM
+  breaks?: number[] // extra stroke breaks, as fractions of the loop
+  gap?: number // gap at each break (negative = strokes overshoot)
+  taper?: number // taper length at stroke ends
+  heavy?: [number, number, number, number][] // [x, y, radius, multiplier] — e.g. under overlaps
+  noBreak?: boolean // single closed stroke (still tapered at the lit point)
+}
+
+// Variable-width contour of a closed form: several overlapping tapered strokes.
+export function inkRing(cv: Curve, o: InkOpts = {}, seed = 7): string {
+  const p = cv.p
+  const n = p.length
+  const w = o.w ?? 3.6
+  const thin = o.thin ?? 0.9
+  const lv = o.light ?? [-0.6, -0.8]
+  const ll = Math.hypot(lv[0], lv[1]) || 1
+  let area = 0
+  for (let i = 0; i < n; i++) {
+    const a = p[i]
+    const b = p[(i + 1) % n]
+    area += a[0] * b[1] - b[0] * a[1]
+  }
+  const sgn = area > 0 ? -1 : 1 // flips the left normal to point outward
+  const N = normals(p, true).map((q) => [q[0] * sgn, q[1] * sgn] as Pt)
+  const r = rng(seed)
+  const ph = r() * 6.28
+  const s = arcLen(p)
+  const L = s[n - 1] + Math.hypot(p[0][0] - p[n - 1][0], p[0][1] - p[n - 1][1])
+  const fac = N.map((q) => smoothstep((1 - (q[0] * lv[0] + q[1] * lv[1]) / ll) / 2 * 1.25 - 0.1))
+  const width = p.map((q, i) => {
+    let k = thin + (w - thin) * Math.pow(fac[i], 1.15)
+    k *= 1 + 0.14 * Math.sin(s[i] * 0.35 + ph) + 0.08 * Math.sin(s[i] * 0.11 + ph * 2)
+    for (const [hx, hy, hr, hm] of o.heavy ?? []) {
+      const d = Math.hypot(q[0] - hx, q[1] - hy)
+      if (d < hr) k *= 1 + (hm - 1) * smoothstep(1 - d / hr)
+    }
+    return k
+  })
+  // break at the most-lit point (+ requested extra breaks)
+  let lit = 0
+  for (let i = 1; i < n; i++) if (fac[i] < fac[lit]) lit = i
+  const br = [s[lit] / L, ...(o.breaks ?? [])].map((t) => ((t % 1) + 1) % 1).sort((a, b) => a - b)
+  const gap = o.gap ?? 1.6
+  const taper = o.taper ?? 7
+  let out = ''
+  const count = o.noBreak ? 1 : br.length
+  for (let k = 0; k < count; k++) {
+    const t0 = br[k] * L + gap / 2
+    const t1 = (k + 1 < br.length ? br[k + 1] * L : br[0] * L + L) - gap / 2
+    const P: Pt[] = []
+    const W: number[] = []
+    const NN: Pt[] = []
+    const tm = ((t0 % L) + L) % L
+    let first = 0
+    while (first < n - 1 && s[first] < tm) first++
+    const startIdx = first + Math.floor(t0 / L) * n - 1
+    for (let j = 0; j < n * 2; j++) {
+      const idx = startIdx + j
+      const i = ((idx % n) + n) % n
+      const pos = s[i] + Math.floor(idx / n) * L
+      if (pos > t1) break
+      if (pos < t0) continue
+      const e = Math.min(pos - t0, t1 - pos)
+      P.push(p[i])
+      NN.push(N[i])
+      W.push(Math.max(0.12, width[i] * Math.pow(Math.min(1, e / taper), 0.6)))
+    }
+    if (P.length > 2) out += ribbon(P, W, NN)
+  }
+  return out
+}
+
+// Open tapered ink line (interior lines, creases, hatching, lashes).
+export function inkLine(f: number[] | Pt[], w: number, seed = 3, t0 = 0.22, t1 = 0.32, amp = 0.25): string {
+  const sc = sampleCurve(f, false, 1.2)
+  const p = wobble(sc.p, amp, seed, false)
+  if (p.length < 3) return ''
+  const s = arcLen(p)
+  const L = s[s.length - 1] || 1
+  const W = s.map((v) => {
+    const t = v / L
+    const k = Math.min(1, t0 > 0 ? t / t0 : 1, t1 > 0 ? (1 - t) / t1 : 1)
+    return Math.max(0.1, w * Math.pow(Math.max(0, k), 0.65))
+  })
+  return ribbon(p, W, normals(p, false))
+}
+
+// Tapered limb outline around a centreline (half-widths per control point).
+export function tube(center: number[], half: number[], capK = 1): number[] {
+  const sc = sampleCurve(center, false, 2)
+  const p = sc.p
+  const N = normals(p, false)
+  const hw = sc.u.map((u) => {
+    const i = Math.min(half.length - 2, Math.floor(u))
+    const t = smoothstep(u - i)
+    return half[i] + (half[i + 1] - half[i]) * t
+  })
+  const Lf: number[] = []
+  const Rt: number[] = []
+  p.forEach((q, i) => {
+    Lf.push(q[0] + N[i][0] * hw[i], q[1] + N[i][1] * hw[i])
+    Rt.push(q[0] - N[i][0] * hw[i], q[1] - N[i][1] * hw[i])
+  })
+  const cap = (q: Pt, nrm: Pt, r: number, dir: number) => {
+    const o: number[] = []
+    const tx = -nrm[1] * dir
+    const ty = nrm[0] * dir
+    for (let k = 1; k < 4; k++) {
+      const a = (k / 4) * Math.PI
+      o.push(q[0] + nrm[0] * r * Math.cos(a) + tx * r * Math.sin(a) * capK, q[1] + nrm[1] * r * Math.cos(a) + ty * r * Math.sin(a) * capK)
+    }
+    return o
+  }
+  const last = p.length - 1
+  const out: number[] = [...Lf, ...cap(p[last], N[last], hw[last], -1)]
+  for (let i = Rt.length - 2; i >= 0; i -= 2) out.push(Rt[i], Rt[i + 1])
+  const c0 = cap(p[0], [-N[0][0], -N[0][1]], hw[0], -1)
+  return out.concat(c0)
+}
+
+// Keep the part of a dense outline above / below a boundary y = g(x).
+export function cut(p: Pt[], g: (x: number) => number, keep: 'above' | 'below'): Pt[] {
+  const ins = (q: Pt) => (keep === 'above' ? q[1] <= g(q[0]) : q[1] >= g(q[0]))
+  const cross = (a: Pt, b: Pt): Pt => {
+    let lo = 0
+    let hi = 1
+    for (let k = 0; k < 18; k++) {
+      const m = (lo + hi) / 2
+      const q: Pt = [a[0] + (b[0] - a[0]) * m, a[1] + (b[1] - a[1]) * m]
+      if (ins(q) === ins(a)) lo = m
+      else hi = m
+    }
+    return [a[0] + (b[0] - a[0]) * lo, a[1] + (b[1] - a[1]) * lo]
+  }
+  const out: Pt[] = []
+  let exit: Pt | null = null
+  for (let i = 0; i < p.length; i++) {
+    const a = p[i]
+    const b = p[(i + 1) % p.length]
+    if (ins(a)) out.push(a)
+    if (ins(a) !== ins(b)) {
+      const x = cross(a, b)
+      if (!ins(a) && exit) {
+        // follow the boundary curve from where we left the region
+        const steps = Math.ceil(Math.abs(x[0] - exit[0]) / 2)
+        for (let k = 1; k < steps; k++) {
+          const xx = exit[0] + ((x[0] - exit[0]) * k) / steps
+          out.push([xx, g(xx)])
+        }
+      }
+      out.push(x)
+      if (ins(a)) exit = x
+    }
+  }
+  if (exit && out.length && !ins(p[0])) {
+    const x = out[0]
+    const steps = Math.ceil(Math.abs(x[0] - exit[0]) / 2)
+    for (let k = 1; k < steps; k++) {
+      const xx = exit[0] + ((x[0] - exit[0]) * k) / steps
+      out.push([xx, g(xx)])
+    }
+  }
+  return out
+}
+
+export const polyD = (p: Pt[]) => p.map((q, i) => `${i ? 'L' : 'M'}${q2(q[0])} ${q2(q[1])}`).join('') + 'Z'
+
+// Soft, irregular paint dab: nested hand-shaped blobs, each faint.
+export function dab(cx: number, cy: number, rx: number, ry: number, rgb: string, alpha: number, seed = 1, rot = 0, rings = Math.max(5, Math.min(14, Math.round(Math.max(rx, ry) / 1.8)))): VectorPath[] {
+  const base = oval(0, 0, 1, 1, 0, seed, 0.22)
+  return Array.from({ length: rings }, (_, i) => {
+    const k = 1 - (i / rings) * 0.62
+    return { d: smooth(place(base, cx, cy, rot, rx * k, ry * k)), fill: `rgba(${rgb},${(alpha / rings).toFixed(3)})` }
+  })
+}
+
+// Clip (and optionally blend) a list of paths to a shape.
+export function within(clip: string, paths: VectorPath[], blend?: GlobalCompositeOperation): VectorPath[] {
+  return paths.map((p) => ({ ...p, clip, blend: blend ?? p.blend }))
+}
+
+// Hatching along a guide curve: short tapered strokes at an angle (deg).
+export function hatch(guide: number[], count: number, len: number, ang: number, w: number, seed = 5): string {
+  const sc = sampleCurve(guide, false, 1)
+  const p = sc.p
+  const s = arcLen(p)
+  const L = s[s.length - 1]
+  const r = rng(seed)
+  let out = ''
+  for (let k = 0; k < count; k++) {
+    const target = ((k + 0.5 + (r() - 0.5) * 0.5) / count) * L
+    let i = 0
+    while (i < p.length - 1 && s[i] < target) i++
+    const a = ((ang + (r() - 0.5) * 10) * Math.PI) / 180
+    const l = len * (0.65 + r() * 0.45)
+    const x = p[i][0]
+    const y = p[i][1]
+    const bend = (r() - 0.5) * l * 0.18
+    out += inkLine([x, y, x + Math.cos(a) * l * 0.5 - Math.sin(a) * bend, y + Math.sin(a) * l * 0.5 + Math.cos(a) * bend, x + Math.cos(a) * l, y + Math.sin(a) * l], w * (0.75 + r() * 0.4), seed + k, 0.12, 0.7, 0.1)
+  }
+  return out
+}
+
+// Paper / brush grain: tiny specks (clip it to the figure, multiply).
+export function grain(x: number, y: number, w: number, h: number, count: number, seed: number, rmin = 0.18, rmax = 0.5): string {
+  const r = rng(seed)
+  let d = ''
+  for (let i = 0; i < count; i++) d += circ(x + r() * w, y + r() * h, rmin + r() * (rmax - rmin))
+  return d
+}
+
+// Short tapered strokes (fur, fabric weave, brush texture) scattered in a box.
+export function strokesIn(x: number, y: number, w: number, h: number, count: number, len: number, ang: number, sw: number, seed: number): string {
+  const r = rng(seed)
+  let d = ''
+  for (let i = 0; i < count; i++) {
+    const cx = x + r() * w
+    const cy = y + r() * h
+    const a = ((ang + (r() - 0.5) * 30) * Math.PI) / 180
+    const l = len * (0.6 + r() * 0.6)
+    const dx = (Math.cos(a) * l) / 2
+    const dy = (Math.sin(a) * l) / 2
+    d += lens(cx - dx, cy - dy, cx + dx, cy + dy, sw * (0.6 + r() * 0.6))
+  }
+  return d
+}
+
 // ---- Sea sponge in square pants -------------------------------------------
 // Key light: sunlight from the upper-left through the water surface.
 // Cyan rim from the water on the right, warm bounce from the sand below.
 export function sponge(): Art {
-  const BODYD =
-    'M40 24 Q50 14 62 20 Q74 12 86 20 Q98 13 110 20 Q122 12 134 19 Q148 12 160 24 Q166 40 162 56 Q168 72 163 88 Q168 104 164 120 Q166 132 162 144 L38 146 Q34 132 37 120 Q32 104 37 88 Q32 72 37 56 Q32 40 40 24 Z'
-  const SIDE = 'M160 24 L169 19 Q175 35 171 51 Q177 67 172 83 Q177 99 173 115 Q175 127 171 139 L162 144 Q166 132 164 120 Q168 104 163 88 Q168 72 162 56 Q166 40 160 24 Z'
-  const SIDE_SHIRT = 'M162 144 L171 139 L171 152 L162 157 Z'
-  const SIDE_PANTS = 'M162 157 L171 152 L169 175 L160 182 Z'
-  const SHIRT = 'M38 146 L162 144 L162 157 L38 159 Z'
-  const topSegs = [[50, 14, 62, 20], [74, 12, 86, 20], [98, 13, 110, 20], [122, 12, 134, 19], [148, 12, 160, 24]]
-  let TOP = 'M40 24' + topSegs.map(([a, b, c, e]) => `Q${a} ${b} ${c} ${e}`).join('') + 'L169 19'
-  for (let k = topSegs.length - 1; k >= 0; k--) {
-    const [a, b] = topSegs[k]
-    const [px, py] = k > 0 ? [topSegs[k - 1][2], topSegs[k - 1][3]] : [40, 24]
-    TOP += `Q${a + 9} ${b - 5} ${px + 9} ${py - 5}`
-  }
-  TOP += 'Z'
-  const PANTS = 'M38 159 L162 157 L160 182 L40 184 Z'
-  const NOSE = 'M100 72 Q128 70 125 87 Q121 97 104 89 Z'
-  const MOUTH = 'M58 98 Q100 142 142 98 Q100 116 58 98 Z'
-  const YEL = '#ffe14f'
-  const BODY = lin(30, 0, 175, 0, 0, '#fff694', 0.45, '#ffe14f', 1, '#f6cd3d')
-  const CYAN = (x0: number, y0: number, x1: number, y1: number) => lin(x0, y0, x1, y1, 0, T, 0.6, T, 1, 'rgba(140,238,255,0.95)')
-  const limb = (d: string): VectorPath[] => [
-    { d, stroke: INK, sw: 7.5 },
-    { d, stroke: YEL, sw: 3.6 },
-    { d: shift(d, 0.75, 0.85), stroke: 'rgba(200,128,10,0.6)', sw: 1.3 },
-    { d: shift(d, -0.6, -0.7), stroke: 'rgba(255,255,235,0.85)', sw: 1.1 },
+  const LT: Pt = [-0.62, -0.78] // key light from the upper-left
+  const ink = (cv: Curve, o: InkOpts = {}, seed = 7): VectorPath => ({ d: inkRing(cv, { light: LT, ...o }, seed), fill: INK })
+  const line = (f: number[], w: number, seed = 3, t0 = 0.22, t1 = 0.32, col = INK): VectorPath => ({ d: inkLine(f, w, seed, t0, t1), fill: col })
+  const mul = (d: string, fill: Paint, clip: string, alpha = 1): VectorPath => ({ d, fill, clip, blend: 'multiply', alpha })
+  const scr = (d: string, fill: Paint, clip: string, alpha = 1): VectorPath => ({ d, fill, clip, blend: 'screen', alpha })
+  const CYAN = 'rgba(140,238,255,0.95)'
+  const YEL = '#ffe24e'
+
+  // ---- the sponge box: one wobbly silhouette (front + right side + top) ----
+  const TF = [39, 28, 51, 24, 63, 27, 76, 22.5, 89, 26, 102, 21.5, 115, 25, 129, 21, 142, 25, 153, 20.5, 163, 25]
+  const RF = [163, 25, 165.5, 41, 162, 57, 166, 73, 163, 90, 167, 106, 164, 122, 166, 138, 164, 154, 165.5, 170, 163, 185]
+  const SIL = [
+    39, 28, 47, 21, 59, 16.5, 71, 19, 84, 14, 97, 18, 110, 13, 124, 17, 137, 12.5, 150, 16, 161, 11.5, 171, 16.5,
+    175, 33, 172, 49, 176.5, 65, 173, 82, 177.5, 98, 174, 114, 176.5, 130, 173.5, 146, 175, 162, 172, 178,
+    163, 185.5, 132, 186.5, 101, 187.5, 70, 186.5, 41, 185.5,
+    39, 169, 40.5, 153, 37, 138, 40, 122, 35.5, 106, 39, 90, 35.5, 74, 39, 58, 35.5, 42,
   ]
-  const pores: [number, number, number, number][] = [
-    [56, 36, 7, 6], [146, 40, 8, 7], [104, 28, 5, 4], [50, 116, 5, 6], [152, 92, 5, 4], [70, 132, 6, 5], [142, 126, 7, 5], [126, 34, 4, 3],
+  const body = form(SIL, 11, 0.55)
+  const B = body.d
+  const gS = (x: number) => (x <= 164 ? 139.5 - (x - 39) * 0.008 : 138.5 - (x - 164) * 0.78)
+  const gP = (x: number) => gS(x) + 12.5
+  const yelP = polyD(cut(body.p, gS, 'above'))
+  const shirtP = polyD(cut(cut(body.p, gS, 'below'), gP, 'above'))
+  const pantsP = polyD(cut(body.p, gP, 'below'))
+  const SIDE = smooth([...RF, 210, 185, 210, 10], true)
+  const TOPR = smooth([...TF, 175, 0, 30, 0], true)
+
+  // ---- limbs ----
+  const HAND = [
+    -5, 9, -6.5, 4, -10, 2, -14, -1.5, -14.5, -4.5, -12, -5.5, -8, -3, -8, -3, -8.5, -8, -9, -14, -7.5, -18, -4.5, -18.5, -3, -15, -2.5, -10.5, -2.5, -10.5,
+    -1.5, -16.5, -0.5, -21, 2.5, -21.5, 4.5, -18.5, 4.2, -11, 4.2, -11, 6, -15.5, 8, -17.5, 10.5, -16.5, 10.8, -13.5, 9, -7, 10, -2.5, 9.5, 2.5, 6.5, 8,
   ]
-  const eye = (cx: number, ix: number): VectorPath[] => {
-    const E = circ(cx, 64, 22)
-    const I = circ(ix, 67, 10.5)
+  const HAND_REST = [
+    -5, 8, -7, 2.5, -10.5, -0.5, -12.5, -4.5, -10.5, -6.8, -7.2, -4.6, -7.2, -4.6, -7.8, -10, -6.6, -15.5, -3.4, -18.6, 1.6, -19, 5.6, -17.2,
+    8.4, -13, 9.2, -6, 8.6, 2, 6, 8,
+  ]
+  const limb = (center: number[], half: number[], seed: number): VectorPath[] => {
+    const cv = form(tube(center, half), seed, 0.25, 1.2)
     return [
-      { d: E, fill: radLit(cx, 64, 24, 0, '#ffffff', 0.55, '#f2f6fb', 1, '#d3deea') },
-      inside(E, rad(cx - 9, 55, 36, 0, T, 0.62, T, 1, '#9db6d4')),
-      { d: I, fill: radLit(ix, 67, 10.5, 0, '#b0e4ff', 0.55, '#3f92d4', 1, '#1b5796') },
-      inside(I, lin(0, 56.5, 0, 66, 0, 'rgba(10,40,90,0.65)', 1, 'rgba(10,40,90,0)')),
-      { d: arcAlong(ix, 67, 7, 7, 25, 125, 10), stroke: 'rgba(190,240,255,0.75)', sw: 1.6, clip: I, blend: 'screen' },
-      { d: I, stroke: INK, sw: 2 },
-      { d: circ(ix, 67, 4.8), fill: INK },
-      { d: E, stroke: INK, sw: 3.5 },
-      { d: ell(cx - 9, 53, 7, 4), fill: 'rgba(255,255,255,0.8)' },
-      { d: circ(ix - 3.6, 63, 2.8), fill: '#ffffff' },
-      { d: circ(ix + 3.4, 71, 1.2), fill: 'rgba(255,255,255,0.85)' },
+      { d: cv.d, fill: lin(center[0], center[1], center[center.length - 2], center[center.length - 1], 0, '#fff07a', 1, '#ffd94a') },
+      mul(shift(cv.d, 1.6, 1.4), 'rgba(222,150,40,0.75)', cv.d),
+      ink(cv, { w: 2.6, thin: 0.7, taper: 4 }, seed + 1),
     ]
   }
-  const shoe = (x: number): VectorPath[] => {
-    const S = `M${x - 18} 205 Q${x - 18} 197 ${x - 4} 197 Q${x + 12} 197 ${x + 13} 205 Q${x + 13} 211 ${x - 3} 211 Q${x - 18} 211 ${x - 18} 205 Z`
+  const hand = (x: number, y: number, rot: number, s: number, seed: number, rest = false): VectorPath[] => {
+    const cv = form(place(rest ? HAND_REST : HAND, x, y, rot, s), seed, 0.18, 1)
+    const fold = (f: number[]) => line(place(f, x, y, rot, s), 0.9, seed + 3, 0.1, 0.6)
     return [
-      { d: S, fill: lin(0, 196, 0, 212, 0, '#55555c', 1, '#0c0c10') },
-      rimLight(S, CYAN(x - 18, 197, x + 13, 211), 1.4),
-      { d: S, stroke: INK, sw: 2.5 },
-      { d: ell(x - 8, 200.5, 6, 1.8), fill: 'rgba(255,255,255,0.7)' },
-      { d: circ(x + 4, 200, 1), fill: 'rgba(255,255,255,0.8)' },
+      { d: cv.d, fill: lin(x - 8, y - 12, x + 8, y + 8, 0, '#fff6a0', 0.5, YEL, 1, '#f2c53a') },
+      mul(smooth(place([4, -10, 9.5, -6, 9, 3, 5, 8, 0, 6, 2, -2], x, y, rot, s)), 'rgba(226,150,40,0.6)', cv.d),
+      ink(cv, { w: 2.2, thin: 0.6, taper: 3, gap: 1 }, seed + 1),
+      ...(rest
+        ? [fold([-2.6, -18.4, -2.2, -14, -2.6, -10]), fold([2.6, -18.6, 2.8, -14, 2.2, -10.5]), fold([-7.2, -4.6, -4.5, -2.5])]
+        : [fold([-2.5, -10.5, -2.7, -6]), fold([4.2, -11, 4, -6.5]), fold([-8, -3, -5, -1])]),
     ]
   }
-  const sock = (x: number): VectorPath[] => {
-    const S = rrect(x - 8, 186, 16, 12, 2)
+  const shoe = (f: number[], seed: number, toe: Pt): VectorPath[] => {
+    const cv = form(f, seed, 0.3, 1.2)
+    const S = cv.d
     return [
-      { d: S, fill: '#ffffff' },
-      { d: `M${x - 8} 190 H${x + 8}`, stroke: '#e2392f', sw: 2 },
-      { d: `M${x - 8} 194 H${x + 8}`, stroke: '#2f6fc0', sw: 2 },
-      inside(S, lin(x - 8, 0, x + 8, 0, 0, T, 0.45, T, 1, '#9aaac4')),
-      { d: S, stroke: INK, sw: 2.5 },
+      { d: S, fill: lin(toe[0], toe[1] - 7, toe[0], toe[1] + 10, 0, '#4b4b55', 1, '#101016') },
+      ...within(S, [...dab(toe[0], toe[1] - 2, 9, 4, '120,130,150', 0.45, seed)]),
+      { d: smooth(place([-34, 7.2, -10, 8.4, 12, 8.1, 34, 7, 34, 22, -34, 22], toe[0], toe[1] - 1)), fill: '#26262e', clip: S },
+      { d: inkLine(place([-22, 7.4, -2, 8.5, 20, 7.8], toe[0] + (toe[0] < 100 ? 6 : -6), toe[1] - 1), 1.3, seed, 0.15, 0.2), fill: INK },
+      { d: inkLine(place([-20, 9.4, 0, 10.4, 18, 9.6], toe[0] + (toe[0] < 100 ? 6 : -6), toe[1] - 1), 0.7, seed + 4, 0.2, 0.3), fill: 'rgba(170,190,215,0.55)' },
+      { d: inkLine(toe[0] < 100 ? [toe[0] + 14, toe[1] - 5, toe[0] + 10, toe[1] - 1, toe[0] + 11, toe[1] + 3] : [toe[0] - 14, toe[1] - 5, toe[0] - 10, toe[1] - 1, toe[0] - 11, toe[1] + 3], 1, seed + 5, 0.3, 0.4), fill: 'rgba(200,210,235,0.55)' },
+      { d: hatch(toe[0] < 100 ? [toe[0] + 10, toe[1] + 7.5, toe[0] + 22, toe[1] + 6] : [toe[0] - 22, toe[1] + 6, toe[0] - 10, toe[1] + 7.5], 5, 3, 250, 0.6, seed + 6), fill: 'rgba(0,0,0,0.6)', clip: S },
+      rimLight(S, lin(toe[0] - 20, 0, toe[0] + 20, 0, 0, T, 0.6, T, 1, CYAN), 1.3),
+      ink(cv, { w: 2.7, thin: 0.8, taper: 5 }, seed + 1),
+      { d: smooth(oval(toe[0] - 3, toe[1] - 4, 5, 1.8, toe[0] < 100 ? -12 : 12, seed, 0.15)), fill: 'rgba(255,255,255,0.75)' },
+      { d: circ(toe[0] + (toe[0] < 100 ? 5 : -2), toe[1] - 5, 0.9), fill: 'rgba(255,255,255,0.9)' },
     ]
   }
+  const sock = (center: number[], seed: number): VectorPath[] => {
+    const cv = form(tube(center, [4.4, 4.0, 4.2]), seed, 0.2, 1)
+    const S = cv.d
+    const y0 = center[1]
+    return [
+      { d: S, fill: '#fbfcff' },
+      { d: inkLine([center[0] - 6, y0 + 2.6, center[0], y0 + 3.2, center[0] + 6, y0 + 2.6], 2.1, seed, 0, 0), fill: '#e2372e', clip: S },
+      { d: inkLine([center[0] - 6, y0 + 5.8, center[0], y0 + 6.4, center[0] + 6, y0 + 5.8], 2.1, seed + 1, 0, 0), fill: '#2f6fc0', clip: S },
+      mul(shift(S, 2.2, 0), 'rgba(150,160,200,0.6)', S),
+      mul(smooth([center[0] - 8, y0 - 1, center[0] + 8, y0 - 1, center[0] + 8, y0 + 2.5, center[0] - 8, y0 + 3.5]), 'rgba(120,110,150,0.5)', S),
+      ink(cv, { w: 2, thin: 0.6, taper: 3 }, seed + 2),
+    ]
+  }
+
+  // ---- pores: craters that follow each face in perspective ----
+  type Pore = [number, number, number, number, number]
+  const fp: Pore[] = [
+    [58, 40, 6.5, 5, -14], [147, 46, 7.5, 6, 18], [108, 31, 4.2, 3.2, 6], [48, 118, 4.5, 6, -8], [152, 94, 5, 3.6, 22],
+    [68, 131, 5.5, 4, -4], [140, 124, 6.5, 4.6, 12], [127, 34, 3.2, 2.6, 0], [46, 64, 2.6, 3.4, 0], [156, 66, 2.6, 2, 0],
+    [116, 132, 2.6, 2, 0], [53, 88, 2.2, 1.8, 0], [88, 33, 2.4, 1.8, 0], [148, 108, 2.2, 1.7, 0],
+  ]
+  const sp: Pore[] = [[169.5, 46, 2.2, 5.5, 8], [170.5, 92, 1.8, 4.2, 6], [169, 121, 1.6, 3.6, 4], [171, 68, 1.1, 2.4, 0]]
+  const tp: Pore[] = [[70, 19.5, 4.5, 1.5, -6], [118, 18.5, 3.6, 1.2, -4], [150, 17.5, 2.6, 0.9, -8]]
+  const pores: VectorPath[] = []
+  ;[...fp, ...sp, ...tp].forEach(([x, y, rx, ry, rot], i) => {
+    const P = smooth(oval(x, y, rx, ry, rot, 40 + i, 0.16))
+    pores.push({ d: P, fill: '#dcae2a' })
+    pores.push(mul(smooth(oval(x - rx * 0.28, y - ry * 0.3, rx * 0.85, ry * 0.8, rot, 60 + i, 0.12)), '#b98617', P))
+    const arc = (a0: number, a1: number) => {
+      const o: number[] = []
+      for (let k = 0; k <= 6; k++) {
+        const a = ((a0 + ((a1 - a0) * k) / 6) * Math.PI) / 180
+        const cr = Math.cos((rot * Math.PI) / 180)
+        const sr = Math.sin((rot * Math.PI) / 180)
+        const px = Math.cos(a) * rx
+        const py = Math.sin(a) * ry
+        o.push(x + px * cr - py * sr, y + px * sr + py * cr)
+      }
+      return o
+    }
+    if (rx > 2) {
+      pores.push(line(arc(-10, 120), Math.min(1.3, rx * 0.2), 80 + i, 0.3, 0.3, 'rgba(255,252,214,0.95)'))
+      pores.push(line(arc(160, 290), Math.min(1.1, rx * 0.16), 90 + i, 0.3, 0.4, 'rgba(120,70,0,0.55)'))
+    }
+  })
+
+  // ---- face ----
+  const EYE_L = [80, 39.5, 92.5, 43.5, 99.5, 55, 99, 69, 92.5, 79, 80.5, 81.5, 68.5, 78.5, 61, 69, 60.5, 55, 66.5, 44.5]
+  const EYE_R = [122, 39, 133.5, 43.5, 140, 55.5, 139, 68.5, 133, 77.5, 121.5, 80, 110.5, 77.5, 103, 68.5, 102.5, 55.5, 108.5, 44]
+  const eye = (pts: number[], ix: number, iy: number, ir: number, seed: number): VectorPath[] => {
+    const cv = form(pts, seed, 0.3, 1)
+    const E = cv.d
+    const I = smooth(oval(ix, iy, ir, ir * 1.04, 0, seed + 1, 0.04))
+    const Pu = smooth(oval(ix + 0.3, iy + 0.4, ir * 0.48, ir * 0.52, 0, seed + 2, 0.05))
+    return [
+      { d: E, fill: '#fbfdff' },
+      ...within(E, [...dab(ix + 6, iy + 11, 14, 8, '170,190,225', 0.55, seed), ...dab(ix - 8, iy - 14, 12, 6, '190,205,235', 0.4, seed + 3)]),
+      mul(smooth([pts[18] - 3, pts[19] - 4, pts[0], pts[1] - 6, pts[2] + 4, pts[3] - 2, pts[4] + 3, pts[5] + 4, pts[0] + 2, pts[1] + 5.5, pts[18] + 2, pts[19] + 4]), 'rgba(150,170,215,0.65)', E),
+      { d: I, fill: radLit(ix, iy, ir * 1.3, 0, '#8fd4ff', 0.6, '#3b8fd6', 1, '#1d5aa0'), clip: E },
+      { d: inkLine([ix - ir * 0.7, iy + ir * 0.35, ix, iy + ir * 0.82, ix + ir * 0.72, iy + ir * 0.3], 2.4, seed, 0.3, 0.3), fill: 'rgba(170,240,255,0.7)', clip: I, blend: 'screen' },
+      { d: strokesIn(ix - ir, iy - ir, ir * 2, ir * 2, 14, ir * 0.55, 60, 0.35, seed), fill: 'rgba(20,60,120,0.4)', clip: I },
+      mul(shift(I, 0, -ir * 0.9), 'rgba(20,50,110,0.55)', I),
+      { d: inkRing(form(oval(ix, iy, ir, ir * 1.04, 0, seed + 1, 0.04), seed, 0.1), { light: [0.4, 0.9], w: 1.6, thin: 0.5, taper: 3 }, seed), fill: INK, clip: E },
+      { d: Pu, fill: INK, clip: E },
+      { d: smooth(oval(ix - ir * 0.36, iy - ir * 0.4, ir * 0.32, ir * 0.24, -30, seed + 5, 0.1)), fill: '#ffffff', clip: E },
+      { d: circ(ix + ir * 0.4, iy + ir * 0.45, ir * 0.11), fill: 'rgba(255,255,255,0.9)', clip: E },
+      { d: inkRing(cv, { light: [0.15, 1], w: 3.4, thin: 0.8, taper: 6, gap: 1.5 }, seed + 9), fill: INK },
+    ]
+  }
+  const NOSE = form(tube([106, 77, 98.5, 81.5, 91, 84], [5.6, 5.0, 6.2], 1.15), 5, 0.25, 1)
+  const MOUTH = form([54, 97.5, 70, 104, 88, 107.5, 104, 108.5, 122, 104.5, 136.5, 98.5, 146.5, 92.5, 143, 99.5, 134, 112.5, 118, 125.5, 100, 130.5, 82, 128, 67, 118, 58.5, 105], 21, 0.35, 1)
+  const M = MOUTH.d
+  const TOOTH_L = form([86.5, 104, 99, 105.5, 99, 105.5, 99.4, 113, 98.6, 120.5, 93.5, 122.6, 88.4, 120.8, 87, 114, 86.5, 104], 31, 0.2, 1)
+  const TOOTH_R = form([101.5, 105.5, 113.5, 103.5, 113.5, 103.5, 114.4, 111, 113.6, 119, 108.6, 121.4, 103.2, 120.6, 101.8, 113, 101.5, 105.5], 33, 0.2, 1)
+  const TONGUE = form([77, 125, 86, 117.5, 97, 119.5, 104, 117, 113, 116.5, 123, 121, 118, 129, 100, 133, 84, 131], 35, 0.3, 1)
+
+  const COLLAR_L = form([87, 140.5, 100.5, 141.5, 100.5, 141.5, 99, 144, 95.5, 150.5, 95.5, 150.5, 91, 145.5, 87, 140.5], 41, 0.2, 1)
+  const COLLAR_R = form([101.5, 141.5, 115.5, 139.5, 115.5, 139.5, 111.5, 144.5, 106.5, 150, 106.5, 150, 103, 144.5], 43, 0.2, 1)
+  const KNOT = form([97, 142.5, 105.5, 142, 105.5, 142, 104.6, 148.5, 104.6, 148.5, 97.8, 148.8, 97.8, 148.8], 45, 0.15, 1)
+  const TIE = form([97.8, 148.8, 104.6, 148.5, 104.6, 148.5, 108, 160, 101.5, 171, 101.5, 171, 94.6, 160.5], 47, 0.2, 1)
+  const SLEEVE_L = form([47, 139.5, 39, 137.5, 31, 139, 26.5, 143.5, 27, 151, 33, 155.5, 41, 155, 47, 153], 51, 0.3, 1)
+  const SLEEVE_R = form([163, 138, 171, 135, 179.5, 137, 184, 141.5, 183.5, 148.5, 177, 152.5, 169, 151.5, 163, 150], 53, 0.3, 1)
+
   const paths: VectorPath[] = [
     // cast shadow on the sand (light from the upper-left) + contact occlusion
-    ...softShade(118, 211, 78, 9, 0.55, '6,40,70'),
-    ...softShade(72, 209.5, 18, 3, 0.6, '4,24,40'),
-    ...softShade(124, 209.5, 18, 3, 0.6, '4,24,40'),
-    // arms + hands (behind body)
-    ...limb('M39 100 Q17 108 21 132'),
-    ...limb('M161 100 Q183 108 179 130'),
-    ...sphere(21, 135, 6.5, '#fff7a0', '#ffe14f', '#d9a828', 'rgba(140,238,255,0.9)', 3),
-    ...sphere(179, 133, 6.5, '#fff7a0', '#ffe14f', '#d9a828', 'rgba(140,238,255,0.9)', 3),
+    ...softShade(122, 215, 82, 8, 0.55, '6,40,70'),
+    ...softShade(66, 214.5, 20, 2.6, 0.6, '4,24,40'),
+    ...softShade(136, 214.5, 20, 2.6, 0.6, '4,24,40'),
+    // waving arm (behind the box edge) and relaxed arm
+    ...limb([44, 146, 31, 145, 19.5, 136.5, 14.5, 121, 15.5, 106], [3.3, 2.8, 3.0, 2.5, 2.7], 61),
+    ...hand(16.5, 99, -12, 0.72, 63),
+    { d: inkLine([4.5, 82, 5.5, 76, 9.5, 72.5], 1.3, 64, 0.3, 0.3) + inkLine([0.5, 79, 2, 71.5, 7.5, 67], 1.1, 66, 0.3, 0.3), fill: 'rgba(10,40,70,0.55)' },
+    ...limb([172, 145, 184, 152, 189.5, 163, 186.5, 175], [3.2, 2.9, 2.7, 2.6], 65),
+    ...hand(185.5, 181, 172, 0.66, 67, true),
     // legs, socks, shoes
-    ...limb('M74 180 L74 198'),
-    ...limb('M126 180 L126 198'),
-    ...sock(74),
-    ...sock(126),
-    ...shoe(74),
-    ...shoe(130),
-    // top and right faces: the sponge is a box seen slightly from above-left
-    { d: TOP, fill: lin(0, 7, 0, 24, 0, '#fffbc0', 1, '#ffe874') },
-    { d: TOP, stroke: INK, sw: 3.5 },
-    { d: SIDE, fill: lin(0, 19, 0, 144, 0, '#e9b93a', 1, '#c8921f') },
-    { d: ell(169, 60, 2.5, 5) + ell(171, 104, 2, 4), fill: 'rgba(150,100,10,0.55)' },
-    rimLight(SIDE, CYAN(160, 0, 175, 0), 2.2),
-    { d: SIDE, stroke: INK, sw: 3.5 },
-    { d: SIDE_SHIRT, fill: '#b7c2d0', stroke: INK, sw: 3 },
-    { d: SIDE_PANTS, fill: lin(0, 152, 0, 182, 0, '#6e4520', 1, '#4a2c12'), stroke: INK, sw: 3 },
-    // spongy body: base, core shadow, sand bounce, top light
-    { d: BODYD, fill: BODY },
-    inside(BODYD, rad(64, 40, 150, 0, T, 0.5, T, 0.82, '#f0b54c', 1, '#dc9c35')),
-    inside(BODYD, lin(0, 118, 0, 146, 0, T, 1, '#e3a94a'), 'multiply', 0.8),
-    inside(BODYD, rad(56, 30, 70, 0, 'rgba(255,255,225,0.75)', 1, 'rgba(255,255,225,0)'), 'screen'),
-    // pores are craters: shadowed upper-left wall, lit lower-right lip
-    { d: pores.map(([x, y, rx, ry]) => ell(x, y, rx, ry)).join(''), fill: '#dcb52d' },
-    { d: pores.map(([x, y, rx, ry]) => ell(x - rx * 0.18, y - ry * 0.2, rx * 0.72, ry * 0.66)).join(''), fill: '#b48c18' },
-    { d: pores.map(([x, y, rx, ry]) => arcAlong(x, y, rx, ry, 10, 110, 8)).join(''), stroke: 'rgba(255,252,210,0.9)', sw: 1.2 },
-    // shadows cast by the eyes and nose onto the face
-    { d: shift(circ(78, 64, 22) + circ(122, 64, 22), 3.5, 4.5), fill: 'rgba(176,110,0,0.38)', clip: BODYD, blend: 'multiply' },
-    { d: BODYD, stroke: INK, sw: 4.5 },
-    gloss('M47 36 Q53 27 66 27', 4.5, 0.9),
-    // shirt, collar, tie
-    { d: SHIRT, fill: lin(0, 144, 0, 159, 0, '#ffffff', 1, '#e1e6ee') },
-    inside(SHIRT, lin(0, 144, 0, 150, 0, 'rgba(110,110,140,0.55)', 1, T)),
-    inside(SHIRT, lin(38, 0, 162, 0, 0, T, 0.6, T, 1, '#c3cad8')),
-    { d: SHIRT, stroke: INK, sw: 3.5 },
-    { d: 'M80 145 L94 156 L100 145 Z M120 145 L106 156 L100 145 Z', fill: '#ffffff', stroke: INK, sw: 2.5 },
-    { d: rrect(95, 146, 10, 6, 2), fill: '#c7261e', stroke: INK, sw: 2 },
-    { d: 'M96 152 L104 152 L107 161 L100 174 L93 161 Z', fill: lin(93, 0, 107, 0, 0, '#ff5a4d', 1, '#a81d16'), stroke: INK, sw: 2.5 },
-    { d: 'M97.5 155 L99 162', stroke: 'rgba(255,255,255,0.7)', sw: 1.2 },
-    // square pants with belt
-    { d: PANTS, fill: lin(0, 157, 0, 184, 0, '#b07640', 1, '#7a4a20') },
-    inside(PANTS, lin(0, 157, 0, 163, 0, 'rgba(40,20,0,0.5)', 1, T)),
-    inside(PANTS, lin(38, 0, 162, 0, 0, T, 0.55, T, 1, '#9a6a52')),
-    { d: PANTS, stroke: INK, sw: 3.5 },
-    { d: 'M48 165 H60 M72 165 H84 M116 165 H128 M140 165 H152', stroke: INK, sw: 3.5 },
-    { d: 'M100 168 V182', stroke: 'rgba(0,0,0,0.25)', sw: 2 },
-    { d: 'M44 161 H96', stroke: 'rgba(255,220,180,0.35)', sw: 1.2 },
-    // eyes and lashes
-    ...eye(78, 82),
-    ...eye(122, 118),
-    { d: 'M64 46 Q61 39 58 34 M77 42 Q77 35 76 29 M90 45 Q93 38 97 33 M110 45 Q107 38 103 33 M123 42 Q123 35 124 29 M136 46 Q139 39 142 34', stroke: INK, sw: 3.2 },
-    // rosy cheeks + freckles
-    { d: circ(52, 98, 12), fill: rad(52, 98, 12, 0, 'rgba(255,110,110,0.55)', 1, 'rgba(255,110,110,0)') },
-    { d: circ(148, 98, 12), fill: rad(148, 98, 12, 0, 'rgba(255,110,110,0.5)', 1, 'rgba(255,110,110,0)') },
-    { d: circ(48, 95, 1.5) + circ(54, 100, 1.5) + circ(50, 103, 1.5) + circ(146, 95, 1.5) + circ(152, 99, 1.5) + circ(148, 103, 1.5), fill: '#b5443f' },
-    // open smile: deep interior, tongue, teeth, occlusion under the lip
-    { d: MOUTH, fill: lin(0, 100, 0, 126, 0, '#3a0808', 1, '#8a2424') },
-    { d: 'M82 120 Q100 110 118 120 Q100 128 82 120 Z', fill: lin(0, 112, 0, 126, 0, '#ff8a7c', 1, '#c94a42'), clip: MOUTH },
-    { d: ell(94, 117, 4, 1.4), fill: 'rgba(255,255,255,0.55)', clip: MOUTH },
-    { d: rrect(88.5, 106, 10.5, 12, 2) + rrect(101, 106, 10.5, 12, 2), fill: lin(0, 106, 0, 118, 0, '#ffffff', 1, '#d9dde4'), stroke: INK, sw: 2.2 },
-    inside(MOUTH, lin(0, 98, 0, 112, 0, 'rgba(0,0,0,0.45)', 1, T)),
-    { d: MOUTH, stroke: INK, sw: 3.8 },
-    { d: 'M53 94 Q55 100 60 100 M147 94 Q145 100 140 100', stroke: INK, sw: 2.5 },
-    // long nose: cast shadow, rounded shading, specular
-    { d: shift(NOSE, 3, 6), fill: 'rgba(160,96,0,0.4)', clip: BODYD, blend: 'multiply' },
-    { d: NOSE, fill: BODY },
-    inside(NOSE, rad(108, 76, 24, 0, T, 0.45, T, 1, '#e09a36')),
-    rimLight(NOSE, CYAN(104, 72, 126, 92), 1.6),
-    { d: 'M100 72 Q128 70 125 87 Q121 97 104 89', stroke: INK, sw: 3.5 },
-    { d: ell(110, 76.5, 5, 2.4), fill: 'rgba(255,255,255,0.85)' },
+    ...limb([72, 181, 69.5, 192.5, 71, 204], [3.0, 2.5, 2.8], 71),
+    ...limb([131, 181, 133.5, 192, 131.5, 204], [3.0, 2.5, 2.8], 73),
+    ...sock([69.8, 193, 70, 198.5, 71, 204], 75),
+    ...sock([133.4, 193, 132.8, 198.5, 131.6, 204], 77),
+    ...shoe(place([79, 197.5, 73, 195.8, 64, 196.2, 55, 199, 48.5, 203.5, 47.5, 208, 51.5, 211.6, 63, 212.4, 77, 212, 83.5, 209, 83.5, 202.5], 0, 4), 81, [58, 207]),
+    ...shoe(place([123, 197.5, 131, 195.8, 140, 196.6, 149, 200.8, 154.5, 205.5, 152.5, 210.8, 140, 212.4, 125, 212, 118.5, 209, 118.5, 202.5], 0, 4), 83, [144, 207]),
+    // shadow of the box on the leg tops
+    ...[71, 131.5].map((x) => mul(smooth([x - 8, 180, x + 8, 180, x + 8, 186.5, x - 8, 188.5]), 'rgba(120,70,20,0.6)', B)),
+
+    // ---- body ----
+    { d: B, fill: lin(40, 20, 172, 182, 0, '#fff38a', 0.45, YEL, 1, '#f6cc3a') },
+    ...within(yelP, [
+      ...dab(64, 42, 30, 20, '255,253,215', 0.6, 1),
+      ...dab(48, 80, 12, 26, '255,250,200', 0.35, 2, 10),
+      ...dab(150, 118, 22, 30, '244,166,52', 0.32, 3),
+      ...dab(104, 132, 50, 9, '238,160,50', 0.28, 4),
+      ...dab(42, 122, 7, 22, '150,232,214', 0.32, 5),
+      ...dab(120, 46, 18, 12, '255,236,140', 0.3, 6),
+    ]),
+    // cheek / face occlusion: soft warm cel shapes under the eyes and around the mouth
+    mul(smooth([58, 82, 72, 86, 100, 88, 128, 85, 144, 80, 152, 92, 146, 106, 136, 98, 100, 96, 64, 100, 54, 104, 52, 92]), 'rgba(240,170,70,0.35)', yelP),
+    mul(smooth([60, 112, 80, 132, 100, 138, 124, 132, 142, 112, 150, 122, 134, 140, 100, 141, 66, 140, 52, 124]), 'rgba(236,160,60,0.4)', yelP),
+    // sponge texture: specks and tiny holes
+    { d: grain(36, 14, 142, 128, 260, 3, 0.2, 0.62), fill: 'rgba(190,130,20,0.45)', clip: yelP, blend: 'multiply' },
+    { d: grain(36, 14, 142, 128, 120, 4, 0.2, 0.5), fill: 'rgba(255,255,230,0.55)', clip: yelP },
+    ...pores,
+    // shirt
+    { d: shirtP, fill: lin(0, 139, 0, 152, 0, '#ffffff', 1, '#e8ecf4') },
+    ...within(shirtP, [...dab(60, 145, 22, 5, '255,255,255', 0.6, 7), ...dab(140, 147, 24, 6, '190,198,226', 0.5, 8)]),
+    mul(smooth([38, 139, 168, 137, 168, 141.5, 120, 142.5, 80, 143, 38, 142.5]), 'rgba(150,140,175,0.5)', shirtP),
+    { d: strokesIn(36, 139, 140, 14, 70, 2.2, 0, 0.18, 9), fill: 'rgba(120,130,170,0.35)', clip: shirtP },
+    // pants
+    { d: pantsP, fill: lin(40, 152, 160, 188, 0, '#bd8448', 0.5, '#a06a36', 1, '#74461d') },
+    ...within(pantsP, [...dab(62, 166, 26, 10, '214,160,100', 0.45, 10), ...dab(146, 178, 22, 10, '80,44,20', 0.45, 11), ...dab(100, 182, 30, 4, '60,32,12', 0.4, 12)]),
+    mul(smooth([38, 151, 168, 149, 168, 155, 120, 156, 80, 156.5, 38, 156]), 'rgba(70,35,10,0.55)', pantsP),
+    { d: strokesIn(36, 152, 140, 36, 120, 2.6, 60, 0.2, 13), fill: 'rgba(60,30,10,0.35)', clip: pantsP },
+    { d: strokesIn(36, 152, 140, 36, 60, 2.2, -60, 0.18, 14), fill: 'rgba(255,220,170,0.25)', clip: pantsP },
+    line([46, 158.4, 52, 158.2, 58.5, 158.5], 3.4, 15, 0.12, 0.12),
+    line([70, 158.3, 77, 158, 83.5, 158.3], 3.4, 16, 0.12, 0.12),
+    line([118, 157.7, 125, 157.5, 131.5, 157.8], 3.4, 17, 0.12, 0.12),
+    line([141, 157.5, 148, 157.2, 154.5, 157.4], 3.4, 18, 0.12, 0.12),
+    line([167.5, 151, 170, 149, 172.5, 147.5], 2.8, 19, 0.12, 0.12),
+    line([88, 176, 89.5, 181, 89, 186], 1.1, 20, 0.2, 0.4),
+    line([116, 175, 114.5, 180.5, 115, 186], 1.1, 21, 0.2, 0.4),
+    // side face in shadow (warm, bounced) and the bright top face
+    mul(SIDE, lin(163, 0, 178, 0, 0, 'rgba(226,150,62,0.85)', 1, 'rgba(196,118,40,0.9)'), B),
+    mul(SIDE, lin(0, 120, 0, 186, 0, 'rgba(255,255,255,0)', 1, 'rgba(150,90,40,0.5)'), B),
+    ...within(B, [...dab(170, 60, 4, 22, '255,214,120', 0.35, 22)]),
+    rimLight(B, lin(160, 0, 178, 0, 0, T, 0.72, T, 1, CYAN), 2.2),
+    scr(TOPR, lin(0, 10, 0, 28, 0, 'rgba(255,252,210,0.85)', 1, 'rgba(255,252,210,0.35)'), B),
+    { d: hatch([168, 150, 169, 165, 167.5, 180], 7, 6, 125, 0.8, 23), fill: 'rgba(60,30,10,0.7)', clip: B },
+    { d: hatch([169, 104, 170.5, 118, 169.5, 132], 5, 5, 120, 0.7, 24), fill: 'rgba(120,70,10,0.55)', clip: B },
+    // paper grain over the whole figure
+    { d: grain(30, 8, 152, 182, 420, 5, 0.18, 0.42), fill: 'rgba(80,50,20,0.16)', clip: B, blend: 'multiply' },
+    // interior edges (tapered, stopping short of the contour) and seams
+    line([41, 27.5, 51, 24.3, 63, 27, 76, 22.8, 89, 26, 102, 21.8, 115, 25, 129, 21.3, 142, 25, 153, 20.8, 161, 24.5], 1.6, 25, 0.1, 0.25),
+    line([163.5, 27, 165.5, 41, 162, 57, 166, 73, 163, 90, 167, 106, 164, 122, 166, 138, 164, 154, 165.5, 170, 163.4, 183], 1.7, 26, 0.12, 0.08),
+    line([38, 139.6, 80, 139.2, 120, 138.9, 163, 138.6, 175, 129.5], 1.9, 27, 0.06, 0.1),
+    line([38, 152.2, 80, 151.8, 120, 151.4, 163, 151.1, 175, 141.8], 2.4, 28, 0.04, 0.1),
+    ink(body, { w: 4.6, thin: 1.1, taper: 9, breaks: [0.36, 0.78], gap: -2, heavy: [[118, 187, 30, 1.25]] }, 29),
+
+    // ---- face ----
+    // eyes cast a soft shadow on the face (light upper-left)
+    mul(shift(smooth(EYE_L) + smooth(EYE_R), 3.2, 4.2), 'rgba(200,120,20,0.4)', yelP),
+    ...eye(EYE_R, 120, 60.5, 9.2, 101),
+    ...eye(EYE_L, 82, 61, 9.8, 111),
+    // cheeks pushing up under the eyes
+    line([66, 84.5, 72, 87, 79, 87.4], 1.2, 121, 0.3, 0.5),
+    line([128, 84, 134, 83.5, 139, 80], 1.2, 122, 0.4, 0.3),
+    // lashes
+    line([69, 45, 66, 38.5, 62.5, 33.5], 2.3, 123, 0.05, 0.75),
+    line([80, 40.5, 79.5, 33.5, 78, 28], 2.4, 124, 0.05, 0.75),
+    line([91, 43, 94, 37, 98, 32.5], 2.2, 125, 0.05, 0.75),
+    line([110.5, 43.5, 107.5, 37, 104.5, 32.5], 2.1, 126, 0.05, 0.75),
+    line([122, 39.5, 122.5, 33, 124, 27.5], 2.3, 127, 0.05, 0.75),
+    line([133, 43.5, 137, 37.5, 141.5, 33.5], 2.2, 128, 0.05, 0.75),
+    // mouth: interior, tongue, buck teeth, lips
+    { d: M, fill: lin(0, 98, 0, 130, 0, '#3a0a0c', 0.6, '#6a1a1c', 1, '#8a2a28') },
+    { d: TONGUE.d, fill: lin(0, 116, 0, 133, 0, '#ff8f80', 1, '#d1544b'), clip: M },
+    { d: smooth([86, 124, 96, 121, 104, 122, 112, 120.5, 116, 124, 108, 127, 92, 127.5]), fill: 'rgba(255,190,180,0.5)', clip: M },
+    { d: inkLine([100.5, 121, 101, 125, 100, 129], 1, 131, 0.2, 0.5), fill: 'rgba(120,20,20,0.7)', clip: M },
+    { d: smooth(oval(92, 123.2, 3.6, 1.2, -8, 132, 0.1)), fill: 'rgba(255,255,255,0.6)', clip: M },
+    mul(smooth([52, 92, 100, 104, 150, 88, 146, 104, 100, 117, 56, 108]), 'rgba(40,0,0,0.55)', M),
+    ...[TOOTH_L, TOOTH_R].flatMap((t, i) => [
+      { d: t.d, fill: lin(0, 104, 0, 122, 0, '#ffffff', 0.7, '#f1f1ec', 1, '#cfd3d8') },
+      mul(shift(t.d, 2.2, 0.5), 'rgba(170,175,200,0.6)', t.d),
+      mul(smooth([80, 100, 120, 100, 120, 109, 80, 109]), 'rgba(120,90,90,0.4)', t.d),
+      { d: smooth(oval(i ? 105 : 91, 110, 1.6, 3.4, 4, 140 + i, 0.1)), fill: 'rgba(255,255,255,0.95)' },
+      ink(t, { w: 1.9, thin: 0.6, taper: 3, light: [-0.5, -0.2] }, 141 + i),
+    ]),
+    { d: inkRing(MOUTH, { light: [0.1, 1], w: 3.6, thin: 1.1, taper: 6, gap: -1.5, heavy: [[54, 97.5, 6, 1.4], [146.5, 92.5, 6, 1.4]] }, 151), fill: INK },
+    // cheek bulges, dimples, blush, freckles
+    line([47, 89, 50.5, 97, 56.5, 102.5], 1.8, 152, 0.3, 0.3),
+    line([153, 84, 152, 92, 147, 98.5], 1.8, 153, 0.3, 0.3),
+    ...within(yelP, [...dab(48, 99, 11, 9, '255,110,100', 0.4, 154), ...dab(151, 96, 10, 8.5, '255,110,100', 0.38, 155)]),
+    { d: circ(45, 96, 1.2) + circ(50.5, 100.5, 1.1) + circ(46.5, 103, 1.3) + circ(149, 92.5, 1.2) + circ(154, 97, 1.1) + circ(150, 100.5, 1.2), fill: '#b04238' },
+    // long nose: cast shadow, round shading, rim, specular
+    mul(shift(NOSE.d, 3.8, 6), 'rgba(170,96,0,0.45)', yelP),
+    { d: NOSE.d, fill: lin(88, 76, 104, 88, 0, '#fff6a4', 0.5, YEL, 1, '#f3c43c') },
+    mul(smooth([84, 86, 92, 87.5, 100, 85.5, 108, 81, 110, 86, 98, 92, 86, 92]), 'rgba(232,150,50,0.75)', NOSE.d),
+    { d: hatch([93, 88.5, 99, 87, 104, 84], 4, 3.2, 70, 0.6, 156), fill: 'rgba(120,60,0,0.7)', clip: NOSE.d },
+    rimLight(NOSE.d, lin(86, 90, 100, 76, 0, CYAN, 0.35, T, 1, T), 1.2),
+    { d: inkRing(NOSE, { w: 3, thin: 0.7, taper: 5, breaks: [0.5], gap: 3 }, 157), fill: INK },
+    { d: smooth(oval(89, 81.2, 3.2, 1.6, -20, 158, 0.1)), fill: 'rgba(255,255,255,0.85)' },
+    { d: circ(97.5, 78.6, 0.9), fill: 'rgba(255,255,255,0.8)' },
+
+    // ---- collar, tie, sleeves ----
+    mul(shift(TIE.d, 2.6, 2.4) + shift(COLLAR_L.d + COLLAR_R.d, 1.6, 2), 'rgba(80,60,90,0.4)', B),
+    ...[COLLAR_L, COLLAR_R].flatMap((c, i) => [
+      { d: c.d, fill: lin(0, 140, 0, 151, 0, '#ffffff', 1, '#dfe3ec') },
+      mul(shift(c.d, i ? 2 : -2, 1.5), 'rgba(160,165,200,0.55)', c.d),
+      ink(c, { w: 1.9, thin: 0.6, taper: 3 }, 161 + i),
+    ]),
+    { d: TIE.d, fill: lin(95, 0, 108, 0, 0, '#ff5d4d', 0.55, '#d92a20', 1, '#9a1812') },
+    mul(smooth([102, 149, 106, 150, 108.5, 160, 102, 172, 102.5, 160]), 'rgba(120,10,10,0.55)', TIE.d),
+    line([99.4, 152, 99.8, 158, 99.2, 164], 0.9, 163, 0.2, 0.4, 'rgba(255,220,210,0.85)'),
+    line([103.5, 151, 102.6, 156], 0.8, 164, 0.2, 0.5),
+    ink(TIE, { w: 2.1, thin: 0.6, taper: 3 }, 165),
+    { d: KNOT.d, fill: lin(97, 0, 106, 0, 0, '#ff6a5a', 1, '#b31e16') },
+    mul(shift(KNOT.d, 2.2, 1), 'rgba(110,10,10,0.5)', KNOT.d),
+    ink(KNOT, { w: 1.9, thin: 0.6, taper: 2 }, 166),
+    ...[SLEEVE_L, SLEEVE_R].flatMap((sl, i) => [
+      { d: sl.d, fill: lin(0, 136, 0, 156, 0, '#ffffff', 1, '#d9deea') },
+      mul(shift(sl.d, i ? 2.5 : 3, 2.2), 'rgba(150,155,195,0.6)', sl.d),
+      { d: hatch(i ? [176, 150, 180, 148.5, 183, 146] : [30, 152, 35, 154, 41, 154.4], 4, 3, i ? 250 : 260, 0.6, 167 + i), fill: 'rgba(60,60,100,0.6)', clip: sl.d },
+      line(i ? [170, 142, 174, 145, 176, 149.5] : [40, 141.5, 36, 145.5, 35, 150.5], 0.9, 169 + i, 0.3, 0.4),
+      ink(sl, { w: 2.6, thin: 0.7, taper: 4 }, 171 + i),
+    ]),
+    // specular glints on the sponge body
+    { d: inkLine([46, 36, 51, 30, 60, 28.5], 2.6, 181, 0.2, 0.5), fill: 'rgba(255,255,255,0.85)' },
+    { d: circ(64, 30.5, 0.9), fill: 'rgba(255,255,255,0.85)' },
   ]
   return { viewW: 200, viewH: 220, paths }
 }
@@ -943,129 +1535,238 @@ export function checks(color = '#e0483a'): Art {
 }
 
 export function lazyCat(): Art {
-  const O = lin(30, 0, 190, 0, 0, '#ffc463', 0.5, '#f69a2c', 1, '#e07a1c')
-  const HEAD_FILL = radLit(104, 64, 96, 0, '#ffcd78', 0.55, '#f69a2c', 1, '#d8721a')
-  const CREAM = lin(0, 92, 0, 118, 0, '#fff8e4', 1, '#f3d79e')
-  const STRIPE = '#3a1f0c'
-  const CORE = (x: number, y: number, r: number) => rad(x, y, r, 0, T, 0.5, T, 0.8, '#d77a3a', 1, '#b4552a')
-  const RIM = (x0: number, x1: number) => lin(x0, 0, x1, 0, 0, T, 0.66, T, 1, 'rgba(150,225,255,0.95)')
-  const HEAD = smooth([
-    110, 26, 142, 28, 166, 40, 180, 62, 186, 78, 198, 86, 184, 93, 192, 104, 172, 111, 150, 123, 110, 129, 70, 123, 48, 111, 28, 104, 36, 93, 22, 86, 34, 78, 40, 62, 54, 40, 78, 28,
-  ])
-  const BODY = smooth([66, 112, 110, 106, 154, 112, 176, 140, 182, 170, 172, 186, 110, 191, 48, 186, 38, 170, 44, 140])
-  const BELLY = ell(110, 160, 34, 26)
-  const ARM_L = 'M58 122 Q42 158 56 184 L92 184 Q86 156 86 126 Z'
-  const ARM_R = 'M162 122 Q178 158 164 184 L128 184 Q134 156 134 126 Z'
-  const EARS = 'M42 66 L47 24 Q49 10 61 16 L98 40 Z M178 66 L173 24 Q171 10 159 16 L122 40 Z'
-  const TAIL = 'M166 182 Q214 184 206 146 Q202 124 216 108'
-  const lid = (cx: number): string => {
-    const e = Math.asin(3 / 23)
-    const pts: number[] = []
-    for (let i = 0; i <= 24; i++) {
-      const a = Math.PI - e + (i / 24) * (Math.PI + 2 * e)
-      pts.push(cx + 19 * Math.cos(a), 76 + 23 * Math.sin(a))
-    }
-    return poly(pts, false) + `Q${cx} 84 ${q2(pts[0])} ${q2(pts[1])}Z`
-  }
-  const eye = (cx: number, ix: number): VectorPath[] => {
-    const E = ell(cx, 76, 19, 23)
-    const I = circ(ix, 86, 9.5)
+  const LT: Pt = [-0.7, -0.7] // sunbeam from the window, upper-left
+  const ink = (cv: Curve, o: InkOpts = {}, seed = 7): VectorPath => ({ d: inkRing(cv, { light: LT, ...o }, seed), fill: INK })
+  const line = (f: number[], w: number, seed = 3, t0 = 0.22, t1 = 0.32, col = INK): VectorPath => ({ d: inkLine(f, w, seed, t0, t1), fill: col })
+  const mul = (d: string, fill: Paint, clip: string, alpha = 1): VectorPath => ({ d, fill, clip, blend: 'multiply', alpha })
+  const CYAN = 'rgba(150,228,255,0.95)'
+  const STRIPE = '#7a2e0e'
+  const OR = lin(40, 30, 190, 190, 0, '#ffbf5c', 0.45, '#f79a34', 1, '#e57a22')
+
+  // ---- one continuous silhouette: ears, head with cheek tufts, slumped body ----
+  const SIL = [
+    96, 33.5, 110, 30.5, 122, 33,
+    128, 33.5, 140, 21, 151, 9.5, 151, 9.5, 158, 26, 162, 43,
+    170, 53, 174.5, 65, 183.5, 72.5, 183.5, 72.5, 176, 79, 188, 85.5, 188, 85.5, 177, 91.5, 183, 99.5, 183, 99.5, 170, 104,
+    177, 113, 187, 127, 193.5, 140, 199, 146, 199, 146, 195, 151, 197, 167, 191, 181, 183, 190,
+    160, 194, 128, 196, 98, 196.5, 66, 194.5, 42, 188,
+    31, 172, 28.5, 158, 24, 152, 24, 152, 30, 146, 33, 128, 44, 113, 51, 104.5,
+    42, 101, 42, 101, 48.5, 95.5, 36, 90, 36, 90, 47, 84.5, 39.5, 77, 39.5, 77, 50, 71.5, 51.5, 59, 57, 47.5,
+    58, 42, 62, 26, 66.5, 12, 66.5, 12, 76, 24, 86, 33.5,
+  ]
+  const body = form(SIL, 201, 0.5, 1.4)
+  const B = body.d
+  const BELLY = form([84, 118, 112, 112.5, 145, 117.5, 163, 138, 167, 166, 154, 189, 112, 197, 70, 191, 55, 168, 60, 138], 203, 0.6)
+  const gNeck = (x: number) => 104 + Math.pow((x - 108) / 70, 2) * 8 // where the head overhangs the body
+  const headP = polyD(cut(body.p, gNeck, 'above'))
+  const bodyP = polyD(cut(body.p, gNeck, 'below'))
+
+  // ---- tail curling up behind on the right ----
+  const TAILC = [178, 183, 200, 184, 213, 170, 210, 150, 205.5, 136, 211, 121, 217, 114]
+  const tail = form(tube(TAILC, [9, 8.4, 7.6, 6.8, 6.2, 5.6, 4.6], 1.4), 211, 0.55, 1.2)
+  const TL = tail.d
+  const tailStripes = (() => {
+    const sc: number[][] = [[0.22, 2.4], [0.4, 2.2], [0.57, 2], [0.73, 1.8], [0.88, 1.5]]
+    const pts = TAILC
+    let d = ''
+    sc.forEach(([t, w], i) => {
+      const k = t * (pts.length / 2 - 1)
+      const j = Math.min(pts.length / 2 - 2, Math.floor(k))
+      const f = k - j
+      const x = pts[j * 2] + (pts[j * 2 + 2] - pts[j * 2]) * f
+      const y = pts[j * 2 + 1] + (pts[j * 2 + 3] - pts[j * 2 + 1]) * f
+      const dx = pts[j * 2 + 2] - pts[j * 2]
+      const dy = pts[j * 2 + 3] - pts[j * 2 + 1]
+      const l = Math.hypot(dx, dy) || 1
+      const nx = -dy / l
+      const ny = dx / l
+      const r = 11 - i * 1.2
+      // bowed band across the tube: reads as wrapping round a cylinder
+      d += inkLine([x + nx * r, y + ny * r, x + (dx / l) * 2.6, y + (dy / l) * 2.6, x - nx * r, y - ny * r], w * 1.6, 220 + i, 0.25, 0.25, 0.2)
+    })
+    return d
+  })()
+
+  // ---- arms + paws folded on the belly ----
+  const arm = (center: number[], half: number[], seed: number) => form(tube(center, half, 1.2), seed, 0.4, 1.2)
+  const NECK = (() => {
+    const o: number[] = []
+    for (let x = -10; x <= 230; x += 4) o.push(x, gNeck(x))
+    return smooth([...o, 230, 230, -10, 230], true)
+  })()
+  const ARM_L = arm([61, 100, 56, 120, 62, 136, 77, 145, 89, 147], [13, 12, 10.5, 9.6, 9.4], 231)
+  const ARM_R = arm([164, 100, 171, 120, 166, 136, 150, 145.5, 137, 147], [13, 12.5, 11, 10, 9.8], 233)
+  const PAW_L = form([78, 139.5, 86, 136.5, 93, 136.8, 98.5, 139, 101, 143.5, 100, 148.5, 95, 152, 86, 152.5, 79, 150], 235, 0.3, 1)
+  const PAW_R = form([150, 140, 142, 137, 134.5, 137.5, 128.5, 140, 126, 145, 127.5, 150, 133, 153, 142, 153, 149, 150], 237, 0.3, 1)
+
+  // ---- hind feet, soles toward us (toe beans) ----
+  const FOOT_L = form([52, 172, 63, 174, 70, 182, 68, 192, 58, 197.5, 44, 197, 35, 192, 34, 183, 41, 175], 241, 0.35, 1)
+  const FOOT_R = form([176, 172, 188, 174, 197, 181, 198, 191, 190, 197.5, 175, 197.5, 167, 192, 166, 182, 169, 176], 243, 0.35, 1)
+  const beans = (cx: number, cy: number, s: number, seed: number): VectorPath[] => {
+    const main = form([cx - 6 * s, cy + 2 * s, cx - 3.5 * s, cy - 2 * s, cx, cy - 1 * s, cx + 3.5 * s, cy - 2 * s, cx + 6 * s, cy + 2 * s, cx + 3 * s, cy + 5.5 * s, cx - 3 * s, cy + 5.5 * s], seed, 0.15, 0.8)
+    const toes = [[-7, -6.5, 2.2], [-2.3, -9.2, 2.3], [2.6, -9, 2.3], [7.2, -6, 2.1]]
+    let td = ''
+    toes.forEach(([x, y, r], i) => (td += smooth(oval(cx + x * s, cy + y * s, r * s, r * 1.2 * s, x * 3, seed + i, 0.1))))
     return [
-      { d: E, fill: radLit(cx, 76, 26, 0, '#ffffff', 0.7, '#f2f5f9', 1, '#cdd6e2') },
-      inside(E, rad(cx - 6, 70, 30, 0, T, 0.6, T, 1, '#a9b6d0')),
-      { d: I, fill: radLit(ix, 86, 9.5, 0, '#f4ff9a', 0.6, '#9cc232', 1, '#5e8a18') },
-      { d: arcAlong(ix, 86, 6.5, 6.5, 20, 130, 10), stroke: 'rgba(255,255,200,0.7)', sw: 1.4, clip: I, blend: 'screen' },
-      { d: I, stroke: INK, sw: 2 },
-      { d: circ(ix, 87, 4.6), fill: INK },
-      // the heavy lid casts a shadow onto the eyeball
-      { d: shift(lid(cx), 0, 3.5), fill: 'rgba(60,40,90,0.42)', clip: E, blend: 'multiply' },
-      { d: circ(ix - 3, 84.6, 2.3), fill: '#ffffff' },
-      { d: circ(ix + 3, 90.5, 1.1), fill: 'rgba(255,255,255,0.85)' },
-      { d: E, stroke: INK, sw: 3.5 },
-      { d: lid(cx), fill: HEAD_FILL },
-      inside(lid(cx), lin(0, 53, 0, 81, 0, T, 0.6, T, 1, '#d98a4a')),
-      { d: lid(cx), stroke: INK, sw: 3.5 },
-      { d: arcAlong(cx, 76, 15, 19, 205, 245, 8), stroke: 'rgba(255,240,200,0.7)', sw: 1.6 },
+      { d: main.d + td, fill: lin(0, cy - 11 * s, 0, cy + 6 * s, 0, '#ffc2cc', 1, '#e8869a') },
+      { d: main.d + td, stroke: 'rgba(120,40,40,0.55)', sw: 0.7 },
+      { d: smooth(oval(cx - 2 * s, cy + 0.5 * s, 2.2 * s, 1 * s, -10, seed + 9, 0.1)), fill: 'rgba(255,255,255,0.7)' },
     ]
   }
-  const puff = (x: number): VectorPath[] => {
-    const P = ell(x, 105, 14, 10.5)
-    return [{ d: P, fill: CREAM }, inside(P, rad(x - 5, 100, 18, 0, T, 0.55, T, 1, '#e3b98a'))]
-  }
-  const paw = (x: number): VectorPath[] => {
-    const P = ell(x, 184, 21, 11)
+
+  // ---- face ----
+  const F = (f: number[], k = 1.22) => f.map((v, i) => (i % 2 ? 66 + (v - 69) * k : 100 + (v - 100) * k))
+  const EYE_L = F([86, 49, 95, 52, 99, 62, 98.5, 74, 93.5, 82, 85.5, 84, 77.5, 80, 73.5, 71, 74.5, 59, 79, 51.5])
+  const EYE_R = F([113.5, 48, 123.5, 51.5, 128.5, 61.5, 128, 73.5, 123, 82, 113.5, 84.5, 105, 80.5, 100.5, 71, 101.5, 59, 106.5, 51])
+  const eye = (pts: number[], ix: number, iy: number, lidY: number, lidTilt: number, seed: number): VectorPath[] => {
+    const cv = form(pts, seed, 0.25, 1)
+    const E = cv.d
+    const I = smooth(oval(ix, iy, 7.4, 8.6, 0, seed + 1, 0.05))
+    const LID = smooth([pts[18] - 6, lidY - lidTilt - 30, pts[4] + 6, lidY + lidTilt - 30, pts[4] + 6, lidY + lidTilt, (pts[4] + pts[18]) / 2, lidY + 2.6, pts[18] - 6, lidY - lidTilt])
     return [
-      { d: P, fill: lin(0, 173, 0, 195, 0, '#ffc870', 1, '#e07f1e') },
-      inside(P, CORE(x - 8, 178, 26)),
-      rimLight(P, RIM(x - 21, x + 21), 2),
-      { d: P, stroke: INK, sw: 4 },
-      { d: `M${x - 6} 187 V193 M${x + 4} 187 V193`, stroke: INK, sw: 2.2 },
-      { d: ell(x - 8, 179.5, 6, 2.2), fill: 'rgba(255,255,240,0.7)' },
+      { d: E, fill: '#fbfcf4' },
+      ...within(E, dab(ix + 4, iy + 6, 9, 6, '200,205,175', 0.45, seed)),
+      { d: I, fill: radLit(ix, iy, 8, 0, '#eaff9a', 0.55, '#a6c83a', 1, '#5d8a1a'), clip: E },
+      { d: smooth(oval(ix - 0.8, iy + 0.8, 2.8, 5.4, 0, seed + 2, 0.06)), fill: INK, clip: E },
+      { d: circ(ix - 2.2, iy - 1.6, 1.5) + circ(ix + 2.2, iy + 3.4, 0.7), fill: '#ffffff', clip: E },
+      // heavy lid + its shadow on the eyeball
+      mul(shift(LID, 0, 3.2), 'rgba(120,90,110,0.5)', E),
+      { d: LID, fill: lin(0, lidY - 22, 0, lidY + 2, 0, '#ffc463', 1, '#f0912c'), clip: E },
+      mul(smooth([pts[18] - 4, lidY - 5, pts[4] + 4, lidY - 5, pts[4] + 4, lidY + 3, pts[18] - 4, lidY + 3]), 'rgba(220,120,50,0.6)', E),
+      line([pts[18] + 0.5, lidY - lidTilt + 0.2, (pts[4] + pts[18]) / 2, lidY + 2.4, pts[4] - 0.5, lidY + lidTilt + 0.2], 2.6, seed + 4, 0.15, 0.15),
+      line([pts[18] + 3, lidY - lidTilt - 3.5, (pts[4] + pts[18]) / 2, lidY - 1.4, pts[4] - 3, lidY + lidTilt - 3.5], 0.8, seed + 5, 0.3, 0.3, 'rgba(255,240,200,0.8)'),
+      { d: inkRing(cv, { light: [0.3, 1], w: 2.7, thin: 0.8, taper: 5, gap: 1 }, seed + 9), fill: INK },
     ]
   }
+  const MUZ_L = form(F([101, 84, 95, 82.5, 87, 84.5, 82.5, 90, 84.5, 96, 92, 98.5, 100, 96, 102.5, 90], 1.15), 251, 0.3, 1)
+  const MUZ_R = form(F([101, 84, 108, 82, 116, 84, 120.5, 89.5, 118.5, 95.5, 110.5, 98.5, 103, 96, 100.5, 90], 1.15), 253, 0.3, 1)
+  const NOSE = form(F([96.5, 80, 101.5, 78.6, 106, 80, 104.5, 84, 101.2, 86, 98, 84], 1.2), 255, 0.15, 0.8)
+
   const paths: VectorPath[] = [
-    // cast shadow on the table (to the lower-right) + contact occlusion
-    ...softShade(130, 193, 100, 11, 0.6, '60,20,30'),
-    ...softShade(112, 190, 80, 5, 0.55, '60,20,30'),
-    // tail curling up behind
-    { d: TAIL, stroke: INK, sw: 19 },
-    { d: TAIL, stroke: lin(160, 0, 216, 0, 0, '#f69a2c', 1, '#d87016'), sw: 13 },
-    { d: shift(TAIL, -2, -2), stroke: 'rgba(255,220,150,0.6)', sw: 3 },
-    { d: shift(TAIL, 3, 2), stroke: 'rgba(150,225,255,0.6)', sw: 2 },
-    { d: lens(198, 172, 212, 166, 2.2) + lens(200, 146, 214, 144, 2.2) + lens(203, 126, 216, 124, 2), fill: STRIPE },
-    // body: base, belly, stripes, head shadow, core shadow, rim
-    { d: BODY, fill: O },
-    { d: BELLY, fill: CREAM, clip: BODY },
-    { d: lens(40, 146, 60, 150, 3) + lens(39, 160, 58, 163, 3) + lens(180, 146, 160, 150, 3) + lens(181, 160, 162, 163, 3), fill: STRIPE },
-    inside(BODY, CORE(84, 120, 110)),
-    { d: shift(HEAD, 6, 11), fill: 'rgba(130,40,10,0.45)', clip: BODY, blend: 'multiply' },
-    { d: shift(ARM_L, 5, 2) + shift(ARM_R, 5, 2), fill: 'rgba(130,40,10,0.35)', clip: BODY, blend: 'multiply' },
-    rimLight(BODY, RIM(50, 184), 3.4),
-    { d: BODY, stroke: INK, sw: 4.5 },
-    // ears (behind head)
-    { d: EARS, fill: HEAD_FILL },
-    { d: 'M55 52 L57 30 Q58 24 64 28 L84 41 Z M165 52 L163 30 Q162 24 156 28 L136 41 Z', fill: lin(0, 24, 0, 52, 0, '#ffc4c4', 1, '#e48690') },
-    inside(EARS, lin(0, 24, 0, 66, 0, T, 0.6, T, 1, 'rgba(120,40,20,0.55)')),
-    rimLight(EARS, RIM(42, 180), 1.6),
-    { d: EARS, stroke: INK, sw: 4.5 },
-    // head: base, core shadow, top light, rim, stripes
-    { d: HEAD, fill: HEAD_FILL },
-    inside(HEAD, CORE(88, 52, 132)),
-    inside(HEAD, rad(80, 40, 50, 0, 'rgba(255,245,210,0.6)', 1, 'rgba(255,245,210,0)'), 'screen'),
-    { d: lens(110, 27, 110, 49, 3.4) + lens(97, 29, 100, 46, 2.7) + lens(123, 29, 120, 46, 2.7), fill: STRIPE },
-    { d: lens(25, 87, 46, 88, 2.4) + lens(33, 99, 50, 97, 2.2) + lens(195, 87, 174, 88, 2.4) + lens(187, 99, 170, 97, 2.2), fill: STRIPE },
-    // occlusion under the muzzle and eyes
-    { d: ell(110, 112, 34, 14), fill: rad(110, 112, 34, 0, 'rgba(150,60,10,0.4)', 1, 'rgba(150,60,10,0)'), clip: HEAD, blend: 'multiply' },
-    rimLight(HEAD, RIM(30, 198), 3.4),
-    { d: HEAD, stroke: INK, sw: 4.8 },
-    gloss(arcAlong(110, 74, 62, 40, 205, 245, 14), 4.2, 0.7),
-    // sleepy eyes, looking at the lasagna
-    ...eye(91.5, 86),
-    ...eye(128.5, 120),
-    // muzzle, nose, bored mouth, whiskers
-    { d: ell(99, 105, 14, 10.5) + ell(121, 105, 14, 10.5), stroke: INK, sw: 6 },
-    ...puff(99),
-    ...puff(121),
-    { d: 'M110 99 Q111 106 110 113', stroke: INK, sw: 2.4 },
-    { d: circ(95, 106, 1.1) + circ(101, 109, 1.1) + circ(96, 111, 1.1) + circ(125, 106, 1.1) + circ(119, 109, 1.1) + circ(124, 111, 1.1), fill: 'rgba(120,60,20,0.6)' },
-    { d: shift('M103 95 Q110 90.5 117 95 Q114.5 101.5 110 102.5 Q105.5 101.5 103 95 Z', 1.5, 2.5), fill: 'rgba(140,80,40,0.35)', blend: 'multiply' },
-    { d: 'M103 95 Q110 90.5 117 95 Q114.5 101.5 110 102.5 Q105.5 101.5 103 95 Z', fill: radLit(110, 96, 8, 0, '#ffc0d2', 1, '#d84a76'), stroke: INK, sw: 2.4 },
-    { d: ell(107, 94.6, 2, 1.1), fill: 'rgba(255,255,255,0.9)' },
-    { d: 'M103 120.5 Q110 117.5 117 120.5', stroke: INK, sw: 2.6 },
-    { d: 'M85 102 Q68 98 50 100 M85 108 Q68 108 49 113 M135 102 Q152 98 170 100 M135 108 Q152 108 171 113', stroke: INK, sw: 1.8 },
-    // arms + paws resting on the table
-    { d: ARM_L, fill: O },
-    { d: lens(46, 150, 62, 152, 2.4) + lens(47, 166, 62, 167, 2.4), fill: STRIPE, clip: ARM_L },
-    inside(ARM_L, lin(46, 0, 92, 0, 0, 'rgba(255,240,200,0.5)', 0.4, T)),
-    inside(ARM_L, lin(46, 0, 92, 0, 0, T, 0.55, T, 1, '#d98a4a')),
-    { d: ARM_L, stroke: INK, sw: 4.2 },
-    { d: ARM_R, fill: O },
-    { d: lens(174, 150, 158, 152, 2.4) + lens(173, 166, 158, 167, 2.4), fill: STRIPE, clip: ARM_R },
-    inside(ARM_R, lin(128, 0, 176, 0, 0, T, 0.45, T, 1, '#c9682e')),
-    rimLight(ARM_R, RIM(128, 178), 2.6),
-    { d: ARM_R, stroke: INK, sw: 4.2 },
-    ...paw(74),
-    ...paw(146),
+    // cast shadow on the table (lower-right) + contact occlusion
+    ...softShade(132, 194, 98, 10, 0.6, '60,20,30'),
+    ...softShade(116, 195, 82, 4.5, 0.55, '60,20,30'),
+
+    // tail behind the body
+    { d: TL, fill: lin(176, 0, 218, 0, 0, '#f7a03c', 1, '#d97420') },
+    { d: tailStripes, fill: STRIPE, clip: TL },
+    mul(shift(TL, 3, 1.5), 'rgba(200,90,40,0.6)', TL),
+    rimLight(TL, lin(196, 0, 220, 0, 0, T, 0.55, T, 1, CYAN), 1.8),
+    { d: strokesIn(178, 110, 42, 86, 50, 3.4, 70, 0.32, 213), fill: 'rgba(130,50,10,0.45)', clip: TL },
+    ink(tail, { w: 3.2, thin: 0.9, taper: 6, breaks: [0.5] }, 215),
+    line([212.5, 120, 216, 113.5, 219.5, 110.5], 1.2, 216, 0.2, 0.6),
+
+    // ---- body + head (one silhouette) ----
+    { d: B, fill: OR },
+    ...within(B, [
+      ...dab(82, 52, 30, 20, '255,214,130', 0.55, 1),
+      ...dab(58, 130, 16, 30, '255,200,110', 0.35, 2),
+      ...dab(170, 150, 22, 40, '214,98,40', 0.45, 3),
+      ...dab(150, 64, 18, 22, '226,120,44', 0.35, 4),
+      ...dab(40, 160, 8, 18, '255,226,150', 0.3, 5),
+      ...dab(120, 106, 46, 8, '190,80,30', 0.35, 6),
+    ]),
+    // stripes on forehead, cheeks and flanks — tapered, following the form
+    { d: inkLine([104, 32, 103, 40, 101, 47], 3.4, 261, 0.1, 0.6) + inkLine([92, 34, 92.5, 40, 91.5, 45], 2.6, 262, 0.1, 0.6) + inkLine([116, 34.5, 115, 40, 112.5, 45], 2.6, 263, 0.1, 0.6), fill: STRIPE, clip: B },
+    { d: inkLine([40, 84, 49, 85, 54, 87.5], 2.4, 264, 0.05, 0.6) + inkLine([43, 95, 50, 95, 54, 96.5], 2.1, 265, 0.05, 0.6), fill: STRIPE, clip: B },
+    { d: inkLine([184, 82, 173, 83, 165, 86], 2.6, 266, 0.05, 0.6) + inkLine([180, 94, 171, 94.5, 165, 96.5], 2.3, 267, 0.05, 0.6), fill: STRIPE, clip: B },
+    { d: inkLine([30, 140, 40, 142, 47, 146], 3, 268, 0.05, 0.6) + inkLine([28, 157, 38, 158, 45, 161], 3, 269, 0.05, 0.6) + inkLine([31, 172, 40, 172.5, 46, 175], 2.6, 270, 0.05, 0.6), fill: STRIPE, clip: B },
+    { d: inkLine([196, 138, 184, 141, 175, 146], 3.2, 271, 0.05, 0.6) + inkLine([197, 156, 186, 157.5, 177, 161], 3.2, 272, 0.05, 0.6) + inkLine([193, 173, 183, 173.5, 176, 176], 2.8, 273, 0.05, 0.6), fill: STRIPE, clip: B },
+    // belly: cream, slumped, with its own shading
+    { d: BELLY.d, fill: lin(0, 112, 0, 196, 0, '#fff6dc', 1, '#f6dca6'), clip: bodyP },
+    ...within(bodyP, [...dab(96, 132, 22, 16, '255,255,240', 0.5, 7), ...dab(150, 172, 18, 22, '226,176,130', 0.45, 8)]),
+    mul(smooth([64, 168, 90, 186, 130, 190, 160, 170, 168, 160, 166, 196, 60, 198]), 'rgba(214,160,130,0.45)', BELLY.d),
+    { d: strokesIn(60, 112, 110, 86, 70, 3, 95, 0.28, 9), fill: 'rgba(170,120,70,0.35)', clip: BELLY.d },
+    line([60, 140, 58, 154, 62, 166], 1.1, 274, 0.3, 0.4, 'rgba(120,50,20,0.7)'),
+    line([163, 140, 167, 156, 163, 172], 1.3, 275, 0.3, 0.4, 'rgba(120,50,20,0.75)'),
+    // the big head casts a shadow onto the body: soft cel band + hatching
+    mul(smooth([40, 102, 80, 110, 112, 113, 150, 110, 186, 100, 190, 122, 150, 126, 112, 124, 74, 124, 40, 120]), 'rgba(200,90,50,0.55)', bodyP),
+    { d: hatch([70, 112.5, 108, 116, 150, 112], 12, 6, 95, 0.75, 276), fill: 'rgba(110,40,10,0.6)', clip: bodyP },
+    // form shadow on the right side of head and body
+    mul(smooth([150, 40, 168, 52, 182, 80, 172, 104, 160, 92, 164, 70]), 'rgba(214,110,60,0.55)', headP),
+    mul(smooth([176, 116, 194, 140, 196, 172, 184, 192, 168, 190, 178, 160, 174, 130]), 'rgba(196,90,50,0.6)', B),
+    { d: hatch([186, 150, 189, 168, 183, 184], 7, 6, 160, 0.8, 277), fill: 'rgba(110,40,10,0.6)', clip: B },
+    rimLight(B, lin(150, 40, 200, 120, 0, T, 0.62, T, 1, CYAN), 2.6),
+    // fur: short strokes at the edges and clump lines
+    { d: strokesIn(30, 30, 166, 160, 260, 3.6, 80, 0.32, 278), fill: 'rgba(150,60,15,0.32)', clip: B },
+    { d: strokesIn(30, 30, 166, 90, 90, 3, 60, 0.3, 279), fill: 'rgba(255,230,170,0.35)', clip: headP },
+    line([173, 77, 168, 80, 164, 79], 1.2, 280, 0.2, 0.5),
+    line([175, 92, 170, 94, 165, 93.5], 1.1, 281, 0.2, 0.5),
+    line([46, 89, 51, 91, 55, 90], 1, 282, 0.2, 0.5),
+    line([192, 147, 186, 149, 182, 148], 1.1, 283, 0.2, 0.5),
+    line([27, 153, 32, 155, 36, 154], 1, 284, 0.2, 0.5),
+    // inner ears
+    { d: smooth([131, 37, 143, 25, 150, 16, 154, 30, 156, 42]), fill: lin(0, 16, 0, 44, 0, '#ffc6c6', 1, '#e88894'), clip: B },
+    mul(smooth([150, 16, 154, 30, 157, 44, 150, 40]), 'rgba(160,60,80,0.45)', B),
+    { d: smooth([68, 18, 78, 28, 84, 36, 70, 40, 65, 30]), fill: lin(0, 18, 0, 40, 0, '#ffc6c6', 1, '#e88894'), clip: B },
+    { d: strokesIn(133, 20, 22, 22, 8, 4, 110, 0.35, 285) + strokesIn(67, 20, 14, 18, 6, 4, 70, 0.35, 286), fill: 'rgba(255,240,220,0.8)', clip: B },
+    line([131, 37, 140, 28, 147, 21], 1.2, 287, 0.1, 0.5),
+    line([86, 34, 78, 27.5, 72, 21], 1.1, 288, 0.1, 0.5),
+    // paper grain
+    { d: grain(24, 8, 196, 190, 520, 289, 0.18, 0.42), fill: 'rgba(90,40,10,0.18)', clip: B, blend: 'multiply' },
+    // overlap line where the cheeks overhang the body
+    line([52, 104, 80, 109.5, 112, 112, 146, 109.5, 170, 104], 2.2, 290, 0.08, 0.1),
+    ink(body, { w: 4.4, thin: 1, taper: 9, breaks: [0.25, 0.62], gap: -2, heavy: [[110, 196, 40, 1.2]] }, 291),
+
+    // ---- face ----
+    mul(shift(smooth(EYE_L) + smooth(EYE_R), 3, 3.6), 'rgba(170,70,20,0.45)', headP),
+    ...eye(EYE_L, 77, 72, 65, 1.8, 301),
+    ...eye(EYE_R, 109, 71.5, 64, -2.2, 311),
+    // smug brow marks, one lifted
+    line([70, 43, 80, 41.5, 92, 43.5], 1.7, 321, 0.3, 0.3),
+    line([105, 39, 117, 33, 131, 33.5], 2, 322, 0.3, 0.3),
+    // muzzle puffs with whisker pores
+    ...[MUZ_L, MUZ_R].flatMap((m, i) => [
+      { d: m.d, fill: lin(0, 82, 0, 99, 0, '#fffaea', 1, '#f2d9a8') },
+      mul(shift(m.d, 2.2, 2), 'rgba(214,160,110,0.6)', m.d),
+      { d: strokesIn(i ? 101 : 80, 82, 22, 18, 10, 2.2, 90, 0.25, 323 + i), fill: 'rgba(170,120,70,0.4)', clip: m.d },
+      ink(m, { w: 2.2, thin: 0.6, taper: 4, light: [-0.3, -1] }, 325 + i),
+    ]),
+    { d: circ(86, 88, 0.95) + circ(90.5, 91.5, 0.95) + circ(86.5, 93.5, 0.85) + circ(111.5, 87.5, 0.95) + circ(116, 91, 0.95) + circ(112, 93.5, 0.85), fill: 'rgba(120,70,30,0.65)' },
+    // smug mouth: one corner lifted, cheek crease
+    line([90, 100.5, 98, 102.5, 106, 101.8, 113, 99.5, 119.5, 95], 2, 327, 0.2, 0.15),
+    line([119, 91.5, 121.5, 94.5, 121, 98.5], 1.3, 328, 0.3, 0.3),
+    // nose
+    mul(shift(NOSE.d, 1.4, 2), 'rgba(140,70,40,0.5)', MUZ_L.d + MUZ_R.d),
+    { d: NOSE.d, fill: lin(96, 79, 106, 86, 0, '#ffb6c8', 1, '#d8507a') },
+    ink(NOSE, { w: 1.8, thin: 0.6, taper: 2 }, 329),
+    { d: smooth(oval(99.6, 80.4, 1.6, 0.8, -8, 330, 0.1)), fill: 'rgba(255,255,255,0.9)' },
+    // whiskers: long tapered strokes
+    { d: inkLine([84, 89, 70, 86, 52, 87], 1.2, 331, 0.05, 0.85) + inkLine([84, 93, 68, 94, 51, 98.5], 1.1, 332, 0.05, 0.85) + inkLine([118, 88, 134, 84.5, 152, 85.5], 1.2, 333, 0.05, 0.85) + inkLine([118, 92, 135, 92.5, 153, 96.5], 1.1, 334, 0.05, 0.85), fill: INK },
+
+    // ---- arms + paws folded on the belly ----
+    ...[[ARM_L, PAW_L, 0], [ARM_R, PAW_R, 1]].flatMap(([a, p, i]) => {
+      const A = polyD(cut((a as Curve).p, gNeck, 'below'))
+      const P = (p as Curve).d
+      const right = i === 1
+      return [
+        mul(shift(A + P, 3.5, 3.5), 'rgba(150,70,40,0.5)', bodyP),
+        { d: A, fill: OR },
+        ...within(A, right ? dab(166, 132, 10, 16, '205,90,40', 0.45, 341) : dab(62, 118, 9, 12, '255,215,140', 0.5, 342)),
+        { d: right ? inkLine([176, 124, 167, 124.5, 160, 128], 2.6, 343, 0.05, 0.5) + inkLine([168, 137, 160, 136, 153, 139], 2.4, 344, 0.05, 0.5) : inkLine([52, 122, 60, 122, 66, 126], 2.6, 345, 0.05, 0.5) + inkLine([62, 135, 70, 134.5, 75, 138.5], 2.3, 346, 0.05, 0.5), fill: STRIPE, clip: A },
+        mul(shift(A, right ? 3 : 2.5, 2.5), 'rgba(205,100,50,0.55)', A),
+        { d: strokesIn(right ? 135 : 48, 104, 44, 44, 30, 3, 70, 0.3, 347 + (i as number)), fill: 'rgba(150,60,15,0.35)', clip: A },
+        ...(right ? [rimLight(A, lin(150, 0, 182, 0, 0, T, 0.6, T, 1, CYAN), 1.8)] : []),
+        { d: inkRing(a as Curve, { light: LT, w: 3.2, thin: 0.8, taper: 6, breaks: [0.5] }, 351 + (i as number)), fill: INK, clip: NECK },
+        { d: P, fill: lin(0, 136, 0, 153, 0, '#fff4dc', 1, '#f0cf98') },
+        mul(shift(P, 2, 2.5), 'rgba(210,150,100,0.6)', P),
+        ink(p as Curve, { w: 2.6, thin: 0.7, taper: 4 }, 353 + (i as number)),
+        right ? line([138, 145.5, 137.5, 150, 138.5, 153], 1.1, 355, 0.2, 0.3) : line([90, 146, 90.5, 150, 89.5, 152.5], 1.1, 356, 0.2, 0.3),
+        right ? line([131.5, 144, 131, 148, 132, 151.5], 1, 357, 0.2, 0.3) : line([95.5, 144.5, 96, 148, 95, 151], 1, 358, 0.2, 0.3),
+      ]
+    }),
+
+    line([52, 104, 80, 109.5, 112, 112, 146, 109.5, 170, 104], 2.2, 290, 0.08, 0.1),
+    // ---- hind feet, soles toward the viewer ----
+    ...[[FOOT_L, 51, 186], [FOOT_R, 182, 186]].flatMap(([f, x, y], i) => {
+      const F = (f as Curve).d
+      return [
+        { d: F, fill: lin(0, 172, 0, 198, 0, '#fff4dc', 1, '#efcb92') },
+        mul(shift(F, i ? 3 : 2, 2.5), 'rgba(210,150,100,0.55)', F),
+        ...beans(x as number, (y as number) + 2, 1.05, 361 + (i as number) * 10),
+        ink(f as Curve, { w: 3, thin: 0.8, taper: 5, heavy: [[x as number, 198, 14, 1.3]] }, 381 + (i as number)),
+      ]
+    }),
   ]
   return { viewW: 220, viewH: 200, paths }
 }
@@ -1240,26 +1941,58 @@ export function mysteryVan(): Art {
 }
 
 export function ghost(): Art {
-  const BODY = 'M14 42 Q14 8 40 8 Q66 8 66 42 L66 74 Q63 81 58 76 Q53 71 48 77 Q44 82 40 77 Q36 71 32 77 Q27 82 22 76 Q17 71 14 76 Z'
-  const ARMS = 'M15 46 Q4 46 6 56 Q12 57 16 52 Z M65 46 Q76 44 75 34 Q69 34 65 40 Z'
+  const LT: Pt = [0.7, -0.7] // the moon, upper-right
+  const PINK = 'rgba(255,160,240,0.9)'
+  const BODY = form([
+    41, 7.5, 53, 9.5, 61.5, 18, 65, 31, 66.5, 45, 65.5, 58, 63, 68,
+    61, 74.5, 58.5, 80, 58.5, 80, 55, 76, 51.5, 76.5, 49.5, 82.5, 49.5, 82.5, 45, 78, 40, 78.5, 35.5, 84, 35.5, 84,
+    31, 79.5, 25, 80, 18, 86, 9, 85, 9, 85, 14, 80, 16, 70, 15, 56, 15.5, 40, 19.5, 24, 28.5, 12.5,
+  ], 401, 0.4, 1)
+  const Bd = BODY.d
+  const ARM_L = form(tube([20, 46, 12, 41, 7, 33.5], [5.4, 4.2, 3.6], 1.1), 403, 0.25, 1)
+  const ARM_R = form(tube([60, 48, 68, 52, 75, 50.5], [5.2, 4, 3.5], 1.1), 405, 0.25, 1)
+  const EYE_L = form([32, 29.5, 36, 32, 36.8, 37.5, 35, 43, 31.2, 44, 28, 40.5, 27.6, 34.5, 29, 30.5], 407, 0.15, 0.8)
+  const EYE_R = form([47.5, 28.5, 52, 31, 53, 37, 51, 42.5, 47, 44, 43.6, 40.5, 43.2, 34, 44.6, 30], 409, 0.15, 0.8)
+  const MOUTH = form([35.5, 50, 40.5, 48.6, 45.5, 50.2, 46, 55, 42.5, 59.5, 38, 59, 35, 55], 411, 0.2, 0.8)
+  const part = (cv: Curve, seed: number): VectorPath[] => [
+    { d: cv.d, fill: lin(70, 10, 10, 80, 0, '#ffffff', 0.5, '#f0efff', 1, '#c9c4f0') },
+    { d: shift(cv.d, -2.4, 2.2), fill: 'rgba(150,140,220,0.55)', clip: cv.d, blend: 'multiply' },
+    rimLight(cv.d, lin(10, 0, 70, 0, 0, PINK, 0.4, T, 1, T), 1.4),
+    { d: inkRing(cv, { light: LT, w: 2.4, thin: 0.6, taper: 4 }, seed), fill: INK },
+  ]
   return {
     viewW: 80,
     viewH: 90,
     paths: [
       { d: ell(40, 46, 40, 44), fill: rad(40, 46, 42, 0, 'rgba(210,200,255,0.55)', 1, 'rgba(210,200,255,0)'), blend: 'screen' },
-      { d: ARMS, fill: '#eceeff' },
-      inside(ARMS, lin(0, 34, 0, 57, 0, T, 1, '#b7b4e6')),
-      { d: ARMS, stroke: INK, sw: 3 },
-      { d: BODY, fill: lin(14, 0, 66, 0, 0, '#c9c6f0', 0.45, '#f4f4ff', 1, '#ffffff') },
-      inside(BODY, rad(56, 18, 64, 0, T, 0.55, T, 1, '#a9a2e0')),
-      rimLight(BODY, lin(66, 10, 14, 70, 0, T, 0.7, T, 1, 'rgba(255,160,240,0.85)'), 2.4),
-      { d: BODY, stroke: INK, sw: 3.6 },
-      gloss('M59 34 Q58 17 45 14', 3.2, 0.95),
-      { d: ell(31, 38, 5, 7) + ell(49, 38, 5, 7), fill: INK },
-      { d: circ(33, 35.5, 1.9) + circ(51, 35.5, 1.9), fill: '#ffffff' },
-      { d: ell(40, 52, 4, 5), fill: lin(0, 47, 0, 57, 0, '#1a0614', 1, '#5a2040'), stroke: INK, sw: 2 },
-      { d: circ(25, 47, 4.5), fill: rad(25, 47, 4.5, 0, 'rgba(255,120,170,0.55)', 1, 'rgba(255,120,170,0)') },
-      { d: circ(55, 47, 4.5), fill: rad(55, 47, 4.5, 0, 'rgba(255,120,170,0.55)', 1, 'rgba(255,120,170,0)') },
+      ...part(ARM_L, 413),
+      ...part(ARM_R, 421),
+      { d: Bd, fill: lin(66, 10, 14, 84, 0, '#ffffff', 0.45, '#f4f3ff', 1, '#d2cdf4') },
+      ...within(Bd, [
+        ...dab(54, 22, 12, 10, '255,255,250', 0.7, 1),
+        ...dab(26, 66, 12, 16, '170,160,230', 0.45, 2),
+        ...dab(40, 74, 22, 6, '190,170,240', 0.4, 3),
+        ...dab(60, 60, 6, 12, '255,230,250', 0.4, 4),
+      ]),
+      // hand-drawn cel shadow on the side away from the moon, plus hatching
+      { d: smooth([22, 18, 17, 34, 17, 56, 18, 72, 12, 84, 26, 80, 36, 82, 40, 76, 30, 70, 25, 56, 25, 38, 30, 22]), fill: 'rgba(160,150,225,0.55)', clip: Bd, blend: 'multiply' },
+      { d: hatch([18, 48, 19, 62, 21, 74], 6, 4.5, 35, 0.55, 415), fill: 'rgba(70,50,140,0.55)', clip: Bd },
+      rimLight(Bd, lin(10, 0, 70, 0, 0, PINK, 0.35, T, 1, T), 2.2),
+      { d: grain(8, 6, 62, 82, 120, 417, 0.15, 0.35), fill: 'rgba(80,60,140,0.18)', clip: Bd, blend: 'multiply' },
+      { d: inkRing(BODY, { light: LT, w: 3, thin: 0.7, taper: 6, breaks: [0.55], gap: -1.5 }, 419), fill: INK },
+      // face: big glossy eyes, raised brows, little "boo" mouth
+      ...[EYE_L, EYE_R].flatMap((e, i) => [
+        { d: e.d, fill: lin(0, 29, 0, 44, 0, '#2a1f40', 1, '#0c0814') },
+        { d: smooth(oval(i ? 49.3 : 33.6, 33.6, 1.9, 2.4, 20, 423 + i, 0.1)), fill: '#ffffff' },
+        { d: circ(i ? 46.4 : 30.6, 40.4, 0.8), fill: 'rgba(255,255,255,0.85)' },
+        { d: inkRing(e, { light: [0, 1], w: 1.2, thin: 0.4, taper: 2 }, 425 + i), fill: INK },
+      ]),
+      { d: inkLine([27, 25.5, 31, 23, 35.5, 24.5], 1.4, 427, 0.3, 0.3) + inkLine([44, 23.5, 48.5, 21.5, 53, 23.5], 1.4, 428, 0.3, 0.3), fill: INK },
+      { d: MOUTH.d, fill: lin(0, 49, 0, 60, 0, '#2a0c24', 1, '#6a2a50') },
+      { d: smooth(oval(40.8, 57.2, 3.2, 1.6, 0, 429, 0.15)), fill: '#ff8fb8', clip: MOUTH.d },
+      { d: inkRing(MOUTH, { light: [0, 1], w: 1.6, thin: 0.5, taper: 2 }, 430), fill: INK },
+      ...within(Bd, [...dab(24.5, 47, 4.5, 3.2, '255,120,170', 0.5, 431), ...dab(56.5, 46, 4.5, 3.2, '255,120,170', 0.5, 432)]),
+      { d: inkLine([57, 16, 61, 21, 63, 28], 1.8, 433, 0.2, 0.5), fill: 'rgba(255,255,255,0.95)' },
     ],
   }
 }
