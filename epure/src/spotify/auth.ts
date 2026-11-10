@@ -148,6 +148,7 @@ async function exchangeCode(): Promise<string | null> {
   }
   lsDel(K_VERIFIER)
   lsDel(K_STATE)
+  const startedIn = epoch
   try {
     const res = await fetch(TOKEN_URL, {
       method: 'POST',
@@ -161,7 +162,9 @@ async function exchangeCode(): Promise<string | null> {
       }),
     })
     if (!res.ok) return 'Spotify a refusé l’échange du code. Vérifie la redirect URI dans ton dashboard.'
-    storeTokenResponse(await res.json())
+    const json = await res.json()
+    if (startedIn !== epoch) return null
+    storeTokenResponse(json)
     notify()
     return null
   } catch {
@@ -185,7 +188,11 @@ function storeTokenResponse(json: TokenResponse) {
   scheduleRefresh()
 }
 
+/** Augmente à chaque déconnexion : une réponse de jeton arrivée après est ignorée. */
+let epoch = 0
+
 export function logout() {
+  epoch++
   if (refreshTimer) clearTimeout(refreshTimer)
   writeTokens(null)
   notify()
@@ -203,6 +210,7 @@ export function refreshAccessToken(): Promise<string | null> {
       logout()
       return null
     }
+    const startedIn = epoch
     try {
       const res = await fetch(TOKEN_URL, {
         method: 'POST',
@@ -219,7 +227,10 @@ export function refreshAccessToken(): Promise<string | null> {
         return null
       }
       if (!res.ok) return tokens.access
-      storeTokenResponse(await res.json())
+      const json = await res.json()
+      // Déconnexion pendant l'appel : on ne ressuscite pas la session.
+      if (startedIn !== epoch) return null
+      storeTokenResponse(json)
       return readTokens()?.access ?? null
     } catch {
       // Hors connexion : on garde le jeton actuel, l'appel suivant réessaiera.

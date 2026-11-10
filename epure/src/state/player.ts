@@ -41,8 +41,37 @@ export const usePlayer = <S,>(selector: (s: PlayerState) => S) => useStore(playe
 const POLL_MS = 3000
 /** Titres joués avant l'actuel pendant cette session (l'API n'expose pas le "précédent"). */
 const trail: Track[] = []
+/** État juste avant un swipe optimiste, pour y revenir si Spotify refuse ou fait autre chose. */
+interface Snapshot {
+  state: Pick<PlayerState, 'track' | 'prev' | 'upcoming' | 'isPlaying' | 'liked'>
+  progress: number
+  at: number
+  trail: Track[]
+}
 /** Changement optimiste en attente de confirmation par Spotify. */
-let pending: { id: string; until: number } | null = null
+let pending: { id: string; fromId: string; until: number; snapshot: Snapshot } | null = null
+/** Vrai tant qu'un swipe n'est pas confirmé : l'historique attend avant de compter quoi que ce soit. */
+export const isPending = () => pending !== null
+/** Numéro des appels à /me/player : une réponse arrivée en retard ne doit pas écraser une plus récente. */
+let requestSeq = 0
+let appliedSeq = 0
+/** Dernière action de l'utilisateur : une réponse partie avant est périmée. */
+let lastActionAt = 0
+
+/** Annule l'affichage optimiste et revient à l'état d'avant le swipe. */
+function rollback() {
+  if (!pending) return
+  const { snapshot } = pending
+  pending = null
+  trail.length = 0
+  trail.push(...snapshot.trail)
+  const now = Date.now()
+  playerStore.set({
+    ...snapshot.state,
+    progressMs: snapshot.progress + (snapshot.state.isPlaying ? now - snapshot.at : 0),
+    progressAt: now,
+  })
+}
 let timer: ReturnType<typeof setTimeout> | undefined
 let running = false
 
@@ -95,22 +124,31 @@ async function checkLiked(track: Track) {
 
 function applyPlayback(pb: SpPlayback | null) {
   if (!pb || !pb.device) {
-    playerStore.set({ status: 'no-device', isPlaying: false, device: null })
+    rollback()
+    playerStore.set({ status: 'no-device', isPlaying: false, device: null, offline: false })
     return
   }
   const track = toTrack(pb.item)
   const base: Partial<PlayerState> = { device: pb.device, offline: false }
   if (!track) {
-    playerStore.set({ ...base, status: 'idle', isPlaying: pb.is_playing })
+    // Podcast, fichier local… : plus de titre affiché, sinon l'historique créditerait le dernier.
+    rollback()
+    playerStore.set({ ...base, status: 'idle', track: null, isPlaying: false })
     return
   }
   const now = Date.now()
-  if (pending && now < pending.until && track.id !== pending.id) {
-    // Spotify n'a pas encore pris en compte le swipe : on garde l'affichage optimiste.
-    playerStore.set({ ...base, status: 'ready' })
-    return
+  if (pending) {
+    if (track.id === pending.id) {
+      pending = null // Spotify confirme le swipe
+    } else if (track.id === pending.fromId && now < pending.until) {
+      // Spotify n'a pas encore pris en compte le swipe : on garde l'affichage optimiste.
+      playerStore.set({ ...base, status: 'ready' })
+      return
+    } else {
+      // Spotify joue autre chose que prévu (ou n'a pas bougé) : on repart de l'état réel.
+      rollback()
+    }
   }
-  pending = null
   const timing = { isPlaying: pb.is_playing, progressMs: pb.progress_ms ?? 0, progressAt: now }
   if (playerStore.get().track?.id !== track.id) {
     commitTrack(track, { ...base, ...timing, status: 'ready' })
@@ -121,11 +159,25 @@ function applyPlayback(pb: SpPlayback | null) {
 
 /** Interroge Spotify une fois. */
 export async function refresh() {
+  const seq = ++requestSeq
+  const startedAt = Date.now()
   try {
-    applyPlayback(await api.getPlayback())
+    const playback = await api.getPlayback()
+    // Réponse dépassée par une plus récente, ou partie avant la dernière action : on l'ignore.
+    if (seq < appliedSeq || startedAt < lastActionAt) return
+    appliedSeq = seq
+    applyPlayback(playback)
   } catch (e) {
-    if (e instanceof SpotifyError && e.kind === 'offline') playerStore.set({ offline: true })
-    // 429 et autres : on réessaiera au prochain tour, sans casser l'interface.
+    if (!(e instanceof SpotifyError)) return
+    if (e.kind === 'offline') playerStore.set({ offline: true })
+    else if (e.kind === 'premium' || e.kind === 'scope' || e.kind === 'forbidden') {
+      // Refus durable : on le dit (une seule fois) au lieu de rester sur un écran vide.
+      toastError(e)
+      if (playerStore.get().status === 'loading') playerStore.set({ status: 'idle' })
+    } else if (e.kind === 'rate' && playerStore.get().status === 'loading') {
+      toastError(e)
+    }
+    // Sinon : on réessaiera au prochain tour, sans casser l'interface.
   }
 }
 
@@ -186,7 +238,7 @@ function confirmSoon() {
 }
 
 function fail(e: unknown) {
-  pending = null
+  rollback()
   toastError(e)
   void refresh()
 }
@@ -201,6 +253,7 @@ export function togglePlay() {
     return
   }
   const playing = !s.isPlaying
+  lastActionAt = Date.now()
   playerStore.set({ isPlaying: playing, progressMs: currentProgress(s), progressAt: Date.now() })
   ;(playing ? api.play() : api.pause()).then(confirmSoon, fail)
 }
@@ -217,18 +270,30 @@ export function skip(dir: 1 | -1): boolean {
     return false
   }
   const target = dir === 1 ? s.upcoming[0] : s.prev
+  lastActionAt = Date.now()
   if (target && s.track) {
-    pending = { id: target.id, until: Date.now() + 3500 }
+    pending = {
+      id: target.id,
+      fromId: s.track.id,
+      until: Date.now() + 3500,
+      snapshot: {
+        state: { track: s.track, prev: s.prev, upcoming: s.upcoming, isPlaying: s.isPlaying, liked: s.liked },
+        progress: currentProgress(s),
+        at: Date.now(),
+        trail: [...trail],
+      },
+    }
     commitTrack(target, {
       isPlaying: true,
       upcoming: dir === 1 ? s.upcoming.slice(1) : [s.track, ...s.upcoming],
     })
   }
   ;(dir === 1 ? api.next() : api.previous()).then(confirmSoon, fail)
-  return !!target
+  return !!(target && s.track)
 }
 
 export function seekTo(ms: number) {
+  lastActionAt = Date.now()
   playerStore.set({ progressMs: ms, progressAt: Date.now() })
   api.seek(ms).then(() => setTimeout(() => void refresh(), 700), fail)
 }

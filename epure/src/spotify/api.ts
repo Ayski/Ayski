@@ -31,6 +31,8 @@ export class SpotifyError extends Error {
 
 /** Jusqu'à quand Spotify nous demande de patienter (429). 0 = pas de limite en cours. */
 let rateLimitedUntil = 0
+/** Attente de repli quand Spotify ne dit pas combien patienter : double à chaque 429 d'affilée. */
+let backoffSeconds = 5
 export const rateLimitRemainingMs = () => Math.max(0, rateLimitedUntil - Date.now())
 
 type Query = Record<string, string | number | boolean | undefined>
@@ -65,6 +67,8 @@ async function request<T>(method: string, path: string, opts: Options = {}, retr
   if (!token) throw new SpotifyError('auth', 401, 'Session expirée.')
 
   const url = new URL(path.startsWith('http') ? path : BASE + path)
+  // Le jeton ne part que vers l'API Spotify, quelle que soit l'URL de pagination reçue.
+  if (url.origin !== 'https://api.spotify.com') throw new SpotifyError('unknown', 0, 'Adresse inattendue.')
   for (const [k, v] of Object.entries(opts.query ?? {})) {
     if (v !== undefined) url.searchParams.set(k, String(v))
   }
@@ -91,8 +95,11 @@ async function request<T>(method: string, path: string, opts: Options = {}, retr
   }
 
   if (res.status === 429) {
-    const wait = Number(res.headers.get('Retry-After') ?? '5')
-    rateLimitedUntil = Date.now() + (Number.isFinite(wait) ? wait : 5) * 1000
+    const header = Number(res.headers.get('Retry-After'))
+    const wait = Number.isFinite(header) && header > 0 ? header : backoffSeconds
+    backoffSeconds = Math.min(300, backoffSeconds * 2)
+    // On ne raccourcit jamais une pause déjà demandée.
+    rateLimitedUntil = Math.max(rateLimitedUntil, Date.now() + wait * 1000)
     throw new SpotifyError(
       'rate',
       429,
@@ -101,6 +108,7 @@ async function request<T>(method: string, path: string, opts: Options = {}, retr
         : `Spotify demande une pause de ${Math.ceil(wait)} s.`,
     )
   }
+  if (res.ok) backoffSeconds = 5
 
   if (!res.ok) {
     let reason = ''

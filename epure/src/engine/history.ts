@@ -3,7 +3,7 @@
 
 import * as api from '../spotify/api'
 import { toTrack, type Track } from '../spotify/types'
-import { currentProgress, playerStore, seedPrevious } from '../state/player'
+import { currentProgress, isPending, playerStore, seedPrevious } from '../state/player'
 import { addTracks, getPlays, recordPlay } from './library'
 
 interface Session {
@@ -13,6 +13,8 @@ interface Session {
   lastTick: number
   lastProgress: number
   wasPlaying: boolean
+  /** Compteur figé pendant un swipe pas encore confirmé par Spotify. */
+  frozen: boolean
 }
 
 let session: Session | null = null
@@ -57,7 +59,21 @@ function observe() {
   const p = playerStore.get()
   const now = Date.now()
   const progress = currentProgress(p)
+  if (isPending()) {
+    // Swipe optimiste : on arrête le compteur du titre quitté et on attend la confirmation.
+    // Si Spotify refuse, ce titre reprend son écoute sans avoir été compté comme un skip.
+    if (session && !session.frozen) {
+      const dt = now - session.lastTick
+      if (dt < AWAY_MS && session.wasPlaying) session.listenedMs += dt
+      session.frozen = true
+    }
+    return
+  }
   if (session && p.track?.id === session.track.id) {
+    if (session.frozen) {
+      session.frozen = false
+      session.lastTick = now
+    }
     const dt = now - session.lastTick
     if (dt < AWAY_MS) {
       if (session.wasPlaying) session.listenedMs += dt
@@ -72,11 +88,11 @@ function observe() {
   }
   if (session) {
     const dt = now - session.lastTick
-    if (dt < AWAY_MS && session.wasPlaying) session.listenedMs += dt
-    finalize(session, dt >= AWAY_MS)
+    if (!session.frozen && dt < AWAY_MS && session.wasPlaying) session.listenedMs += dt
+    finalize(session, !session.frozen && dt >= AWAY_MS)
   }
   session = p.track
-    ? { track: p.track, startedAt: now, listenedMs: 0, lastTick: now, lastProgress: progress, wasPlaying: p.isPlaying }
+    ? { track: p.track, startedAt: now, listenedMs: 0, lastTick: now, lastProgress: progress, wasPlaying: p.isPlaying, frozen: false }
     : null
 }
 
