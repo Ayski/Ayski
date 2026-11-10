@@ -302,11 +302,12 @@ a {
 }
 
 .progress {
-  padding: 14px 28px 0;
+  padding: 10px 28px 0;
 }
 .progress-track {
   position: relative;
-  height: 28px;
+  /* Zone tactile de 44 px autour d'une barre de 3 px. */
+  height: 44px;
   touch-action: none;
   cursor: pointer;
 }
@@ -315,7 +316,7 @@ a {
   position: absolute;
   left: 0;
   right: 0;
-  top: 12px;
+  top: 20px;
   height: 3px;
   border-radius: 3px;
 }
@@ -330,7 +331,7 @@ a {
 }
 .progress-knob {
   position: absolute;
-  top: 7.5px;
+  top: 15.5px;
   left: -6px;
   width: 12px;
   height: 12px;
@@ -340,6 +341,7 @@ a {
   transition: opacity 160ms ease;
 }
 .progress-times {
+  margin-top: -10px;
   display: flex;
   justify-content: space-between;
   font-size: 11.5px;
@@ -634,8 +636,8 @@ input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 28px;
-  margin: 0;
+  height: 44px;
+  margin: -6px 0;
   background: transparent;
   touch-action: pan-y;
 }
@@ -646,9 +648,9 @@ input[type='range']::-webkit-slider-runnable-track {
 }
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 22px;
-  height: 22px;
-  margin-top: -9px;
+  width: 28px;
+  height: 28px;
+  margin-top: -12px;
   border-radius: 50%;
   background: var(--text);
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
@@ -659,8 +661,8 @@ input[type='range']::-moz-range-track {
   background: rgb(var(--fg) / 0.18);
 }
 input[type='range']::-moz-range-thumb {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 50%;
   background: var(--text);
@@ -823,6 +825,12 @@ input[type='range']::-moz-range-thumb {
   color: #fff;
   display: grid;
   place-items: center;
+}
+/* Zone tactile élargie autour de la petite croix. */
+.thumb-del::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
 }
 .thumb-del svg {
   width: 13px;

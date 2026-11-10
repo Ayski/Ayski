@@ -39,6 +39,16 @@ function finalize(s: Session, away: boolean) {
   // les écoutes déjà longues ; le reste sera rattrapé par recently-played.
   if (away && s.listenedMs < 30_000) return
   if (s.listenedMs < 1500) return
+  const now = Date.now()
+  // Déjà rattrapée par recently-played (retour dans l'app) : pas de doublon.
+  const synced = getPlays().some(
+    (p) =>
+      p.source === 'sync' &&
+      p.trackId === s.track.id &&
+      p.at + p.durationMs > s.startedAt - 60_000 &&
+      p.at + p.durationMs < now + 180_000,
+  )
+  if (synced) return
   const skipped = !away && isSkip(s.listenedMs, s.track.durationMs)
   const artist = s.track.artists[0]
   void recordPlay({
@@ -46,6 +56,7 @@ function finalize(s: Session, away: boolean) {
     artistId: artist?.id ?? '',
     artistName: artist?.name ?? '',
     at: s.startedAt,
+    endedAt: now,
     listenedMs: Math.round(s.listenedMs),
     durationMs: s.track.durationMs,
     skipped,
@@ -69,6 +80,9 @@ function observe() {
     }
     return
   }
+  // État pas encore rafraîchi après une longue absence : on attend le prochain vrai relevé,
+  // sinon la position extrapolée ferait croire à une écoute complète.
+  if (p.isPlaying && now - p.progressAt >= AWAY_MS) return
   if (session && p.track?.id === session.track.id) {
     if (session.frozen) {
       session.frozen = false
@@ -92,7 +106,9 @@ function observe() {
     finalize(session, !session.frozen && dt >= AWAY_MS)
   }
   session = p.track
-    ? { track: p.track, startedAt: now, listenedMs: 0, lastTick: now, lastProgress: progress, wasPlaying: p.isPlaying, frozen: false }
+    ? // Titre pris en route (app ouverte au milieu) : ce qui a déjà été joué compte, sinon une
+      // fin naturelle passerait pour un skip.
+      { track: p.track, startedAt: now, listenedMs: progress > 5000 ? progress : 0, lastTick: now, lastProgress: progress, wasPlaying: p.isPlaying, frozen: false }
     : null
 }
 
@@ -114,7 +130,14 @@ export async function syncRecentlyPlayed() {
       if (!track || !Number.isFinite(endedAt)) continue
       tracks.push(track)
       const window = track.durationMs + 180_000
-      const already = known.some((p) => p.trackId === track.id && Math.abs(p.at - endedAt) < window)
+      // Écoute en direct : on compare à son intervalle réel (une pause peut l'avoir allongée).
+      const already = known.some(
+        (p) =>
+          p.trackId === track.id &&
+          (p.endedAt
+            ? endedAt > p.at - 60_000 && endedAt < p.endedAt + 180_000
+            : Math.abs(p.at - endedAt) < window),
+      )
       if (already) continue
       await recordPlay({
         trackId: track.id,

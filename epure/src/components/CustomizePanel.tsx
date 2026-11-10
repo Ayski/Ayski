@@ -36,8 +36,13 @@ export function CustomizePanel({ open, onClose }: { open: boolean; onClose: () =
       const file = new File([blob], 'epure-theme.json', { type: 'application/json' })
       // Sur iPhone, la feuille de partage permet d'enregistrer dans Fichiers.
       if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file] })
-        return
+        try {
+          await navigator.share({ files: [file] })
+          return
+        } catch (e) {
+          if (e instanceof DOMException && e.name === 'AbortError') return
+          // Partage refusé (préparation trop longue pour Safari) : on télécharge le fichier.
+        }
       }
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)

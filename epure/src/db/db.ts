@@ -12,6 +12,8 @@ export interface Play {
   artistName: string
   /** Début de l'écoute (ms epoch). */
   at: number
+  /** Fin de l'écoute, pour les écoutes observées en direct (pauses comprises). */
+  endedAt?: number
   /** Durée réellement écoutée. */
   listenedMs: number
   durationMs: number

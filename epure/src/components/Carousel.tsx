@@ -133,7 +133,11 @@ export function Carousel({ onSwipeUp }: { onSwipeUp: () => void }) {
       restDelta: 0.5,
     })
     velocity.current = 0
+    // Transition interrompue par un nouveau changement de titre : son échange final ne doit
+    // pas se jouer par-dessus la transition suivante.
+    let cancelled = false
     void controls.then(() => {
+      if (cancelled) return
       // Échange sans à-coup : les pochettes changent de place dans la même image que le
       // retour à zéro du décalage (elles sont identifiées par titre, donc non rechargées).
       flushSync(() => setShown(targetRef.current))
@@ -141,6 +145,7 @@ export function Carousel({ onSwipeUp }: { onSwipeUp: () => void }) {
       animating.current = false
     })
     return () => {
+      cancelled = true
       controls.stop()
       animating.current = false
     }

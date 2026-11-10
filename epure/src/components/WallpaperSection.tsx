@@ -39,7 +39,12 @@ export function WallpaperSection() {
       // Photo : on passe par le recadrage avant de compresser.
       const image = new Image()
       image.src = URL.createObjectURL(file)
-      await image.decode()
+      try {
+        await image.decode()
+      } catch (e) {
+        URL.revokeObjectURL(image.src)
+        throw e
+      }
       setCropping(image)
     } catch (e) {
       toast(e instanceof Error && e.message ? e.message : 'Impossible de lire ce fichier.')
@@ -106,7 +111,7 @@ export function WallpaperSection() {
                   aria-label="Supprimer ce fond"
                   onClick={(e) => {
                     e.stopPropagation()
-                    void deleteWallpaper(w.id)
+                    if (window.confirm('Supprimer ce fond d’écran ?')) void deleteWallpaper(w.id)
                   }}
                 >
                   <Icon.close />
@@ -145,7 +150,12 @@ export function WallpaperSection() {
       {/* Hors du panneau (portail) : un parent transformé piégerait le plein écran. */}
       {cropping &&
         createPortal(
-          <Cropper image={cropping} onCancel={() => setCropping(null)} onConfirm={(c) => void onCrop(c)} />,
+          <Cropper
+            image={cropping}
+            onCancel={() => {
+              URL.revokeObjectURL(cropping.src)
+              setCropping(null)
+            }} onConfirm={(c) => void onCrop(c)} />,
           document.body,
         )}
     </Section>

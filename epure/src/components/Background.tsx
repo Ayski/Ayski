@@ -1,6 +1,7 @@
 // Fond d'écran derrière toute l'interface : dégradé de la pochette, couleur unie ou image
 // personnelle (photo, GIF, vidéo en boucle muette), avec fondu enchaîné entre deux fonds.
 
+import { useEffect, useRef } from 'react'
 import { AnimatePresence, motion, useTransform } from 'framer-motion'
 import { useBackgroundModel } from '../theme/apply'
 import { motionOff, speedFactor, useSettings } from '../theme/settings'
@@ -15,7 +16,23 @@ export function Background() {
   const tint = useSettings((s) => s.tintWithCover)
   const parallax = useSettings((s) => s.parallax)
   // Parallaxe : le fond suit le doigt, mais bien moins vite que la pochette.
-  const x = useTransform(swipeX, (v) => (parallax && !motionOff() ? v * 0.07 : 0))
+  // Borné à 14 px : le fond déborde de 4 % de chaque côté, jamais plus.
+  const x = useTransform(swipeX, (v) => (parallax && !motionOff() ? Math.max(-14, Math.min(14, v * 0.07)) : 0))
+
+  // iOS peut refuser ou suspendre la lecture automatique d'une vidéo (économie d'énergie,
+  // retour d'arrière-plan) : on la relance au retour dans l'app et au premier toucher.
+  const video = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const resume = () => {
+      if (!document.hidden) void video.current?.play().catch(() => {})
+    }
+    document.addEventListener('visibilitychange', resume)
+    window.addEventListener('pointerdown', resume)
+    return () => {
+      document.removeEventListener('visibilitychange', resume)
+      window.removeEventListener('pointerdown', resume)
+    }
+  }, [])
 
   const isImage = model.kind === 'image'
   // 600 ms quand la pochette change, 400 ms quand je change de fond.
@@ -39,7 +56,7 @@ export function Background() {
           >
             {model.wallpaper &&
               (model.wallpaper.kind === 'video' ? (
-                <video src={model.wallpaper.url} autoPlay loop muted playsInline disablePictureInPicture />
+                <video ref={video} src={model.wallpaper.url} autoPlay loop muted playsInline disablePictureInPicture />
               ) : (
                 <img src={model.wallpaper.url} alt="" draggable={false} />
               ))}

@@ -11,6 +11,8 @@ const format = (ms: number) => {
 
 export function Progress() {
   const duration = usePlayer((s) => s.track?.durationMs ?? 0)
+  const isPlaying = usePlayer((s) => s.isPlaying)
+  const progressAt = usePlayer((s) => s.progressAt)
   const track = useRef<HTMLDivElement>(null)
   const fill = useRef<HTMLDivElement>(null)
   const knob = useRef<HTMLDivElement>(null)
@@ -20,26 +22,37 @@ export function Progress() {
   const scrub = useRef<number | null>(null)
   const [dragging, setDragging] = useState(false)
 
+  // Largeur de la barre, mesurée une fois puis à chaque redimensionnement (pas à chaque image).
+  const width = useRef(0)
+  useEffect(() => {
+    const el = track.current
+    if (!el) return
+    const observer = new ResizeObserver(() => (width.current = el.offsetWidth))
+    width.current = el.offsetWidth
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   useEffect(() => {
     let frame = 0
     let lastText = ''
     const draw = () => {
       const ms = scrub.current ?? currentProgress(playerStore.get())
       const ratio = duration ? Math.min(1, ms / duration) : 0
-      const width = track.current?.offsetWidth ?? 0
       if (fill.current) fill.current.style.transform = `scaleX(${ratio})`
-      if (knob.current) knob.current.style.transform = `translate3d(${ratio * width}px,0,0)`
+      if (knob.current) knob.current.style.transform = `translate3d(${ratio * width.current}px,0,0)`
       const text = format(ms)
       if (text !== lastText) {
         lastText = text
         if (elapsed.current) elapsed.current.textContent = text
         if (remaining.current) remaining.current.textContent = '-' + format(duration - ms)
       }
-      frame = requestAnimationFrame(draw)
+      // En pause et sans doigt sur la barre, rien ne bouge : on ne dessine qu'une fois.
+      if (isPlaying || dragging) frame = requestAnimationFrame(draw)
     }
     frame = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(frame)
-  }, [duration])
+  }, [duration, isPlaying, dragging, progressAt])
 
   const positionFrom = (clientX: number) => {
     const rect = track.current!.getBoundingClientRect()

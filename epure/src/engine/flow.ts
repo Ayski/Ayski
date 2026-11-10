@@ -107,14 +107,19 @@ async function tick() {
   try {
     // 1) Le titre en cours sort du plan, avec tout ce qui le précédait.
     let plan = flowStore.get().plan
-    if (needsReconcile) {
-      // Après une réouverture : un titre "envoyé" qui n'est plus dans la file a déjà été joué.
+    let index = plan.findIndex((p) => p.track.id === player.track!.id)
+    if (needsReconcile || (index < 0 && plan.some((p) => p.sent))) {
+      // Réouverture, ou titre en cours inconnu du plan (les titres envoyés ont pu être joués
+      // écran verrouillé) : un titre "envoyé" absent de la vraie file a déjà été joué.
       const queue = await api.getQueue()
-      const ids = new Set(queue?.queue.map((t) => t.id))
-      plan = plan.filter((p) => !p.sent || ids.has(p.track.id))
-      needsReconcile = false
+      plan = flowStore.get().plan // le plan a pu être modifié pendant l'appel
+      if (queue) {
+        const ids = new Set(queue.queue.map((t) => t.id))
+        plan = plan.filter((p) => !p.sent || ids.has(p.track.id))
+        needsReconcile = false
+      }
+      index = plan.findIndex((p) => p.track.id === player.track!.id)
     }
-    const index = plan.findIndex((p) => p.track.id === player.track!.id)
     if (index >= 0) plan = plan.slice(index + 1)
 
     // 2) On complète le plan avec de nouveaux choix.
@@ -141,9 +146,17 @@ async function tick() {
       const sent = plan.filter((p) => p.sent).length
       const nextUp = plan.find((p) => !p.sent)
       if (sent >= target || !nextUp) break
-      await api.addToQueue(nextUp.track.uri)
+      // Verrouillé avant l'envoi : un changement de plan pendant l'appel ne peut plus le perdre.
+      const mark = (value: boolean) =>
+        setPlan(flowStore.get().plan.map((p) => (p.track.id === nextUp.track.id ? { ...p, sent: value } : p)))
+      mark(true)
+      try {
+        await api.addToQueue(nextUp.track.uri)
+      } catch (e) {
+        mark(false)
+        throw e
+      }
       sentNow = true
-      setPlan(flowStore.get().plan.map((p) => (p.track.id === nextUp.track.id ? { ...p, sent: true } : p)))
       const prep = flowStore.get().preparing
       if (prep) flowStore.set({ preparing: { ...prep, done: Math.min(prep.total, sent + 1) } })
       await new Promise((r) => setTimeout(r, 180))
@@ -163,7 +176,11 @@ async function tick() {
 
 /** Jette les choix pas encore envoyés (changement de mode, skip…) et en refait. */
 function replan(keep: (p: Planned) => boolean = () => false) {
-  setPlan(flowStore.get().plan.filter((p) => p.sent || keep(p)))
+  // On ne garde que les choix situés avant le premier retiré : la suite est recalculée,
+  // sinon deux titres du même artiste pourraient se retrouver côte à côte.
+  const plan = flowStore.get().plan
+  const cut = plan.findIndex((p) => !p.sent && !keep(p))
+  if (cut >= 0) setPlan(plan.slice(0, cut))
   void tick()
 }
 
@@ -182,8 +199,7 @@ export function reorderPlan(ids: string[]) {
 }
 
 export function removePlanned(id: string) {
-  setPlan(flowStore.get().plan.filter((p) => p.sent || p.track.id !== id))
-  void tick()
+  replan((p) => p.track.id !== id)
 }
 
 /** "Préparer 20 titres" : remplit la file Spotify avant de fermer l'app. */
@@ -206,7 +222,7 @@ export async function prepare(count = 20) {
 /** "Ne plus me le proposer". */
 export async function ban(track: Track) {
   await setFlag(track.id, { banned: true, loved: false })
-  setPlan(flowStore.get().plan.filter((p) => p.sent || p.track.id !== track.id))
+  replan((p) => p.track.id !== track.id)
   if (playerStore.get().track?.id === track.id) skip(1)
   toast('Ce titre ne sera plus proposé.')
 }

@@ -9,6 +9,9 @@ const TTL = 14 * 86_400_000
 
 export const hasLastfm = () => KEY.length > 0
 
+/** Last.fm renvoie un objet seul, et non une liste, quand il n'y a qu'un résultat. */
+const list = <T,>(value: T | T[] | undefined): T[] => (value == null ? [] : Array.isArray(value) ? value : [value])
+
 export interface LfmTrack {
   artist: string
   title: string
@@ -42,7 +45,7 @@ export async function similarArtists(artist: string): Promise<string[]> {
     artist,
     limit: '20',
   })
-  return json?.similarartists?.artist?.map((a) => a.name) ?? []
+  return list(json?.similarartists?.artist).map((a) => a.name)
 }
 
 /** Titres les plus connus d'un artiste (artist.getTopTracks), pour choisir quoi lui faire jouer. */
@@ -52,7 +55,7 @@ export async function artistTopTracks(artist: string): Promise<LfmTrack[]> {
     artist,
     limit: '8',
   })
-  return json?.toptracks?.track?.map((t) => ({ artist: t.artist.name, title: t.name })) ?? []
+  return list(json?.toptracks?.track).map((t) => ({ artist: t.artist.name, title: t.name }))
 }
 
 /** Titres similaires à un titre (track.getSimilar). */
@@ -63,5 +66,5 @@ export async function similarTracks(artist: string, track: string): Promise<LfmT
     track,
     limit: '20',
   })
-  return json?.similartracks?.track?.map((t) => ({ artist: t.artist.name, title: t.name })) ?? []
+  return list(json?.similartracks?.track).map((t) => ({ artist: t.artist.name, title: t.name }))
 }

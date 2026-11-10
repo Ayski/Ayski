@@ -115,11 +115,24 @@ export async function addAnimated(file: File): Promise<string> {
       video.muted = true
       video.playsInline = true
       video.preload = 'auto'
+      video.autoplay = true
       video.src = url
-      await new Promise<void>((resolve, reject) => {
-        video.onloadeddata = () => resolve()
-        video.onerror = () => reject(new Error('Vidéo illisible sur cet appareil.'))
-      })
+      const unreadable = new Error('Vidéo illisible sur cet appareil.')
+      const wait = (event: 'loadeddata' | 'seeked') =>
+        new Promise<void>((resolve, reject) => {
+          video.addEventListener(event, () => resolve(), { once: true })
+          video.addEventListener('error', () => reject(unreadable), { once: true })
+          setTimeout(() => reject(unreadable), 8000)
+        })
+      // iOS ne charge les images d'une vidéo que si elle est lancée : on la joue (muette),
+      // puis on se place un peu après le début pour une vignette qui ne soit pas noire.
+      const loaded = wait('loadeddata')
+      void video.play().catch(() => {})
+      await loaded
+      const seeked = wait('seeked')
+      video.currentTime = 0.1
+      await seeked.catch(() => {})
+      video.pause()
       return await store('video', file, drawThumb(video, video.videoWidth, video.videoHeight))
     }
     const img = new Image()
@@ -136,8 +149,11 @@ export async function deleteWallpaper(id: string) {
   await (await db()).delete('wallpapers', id)
   wallpaperStore.set((s) => ({ list: s.list.filter((w) => w.id !== id) }))
   if (view) {
-    URL.revokeObjectURL(view.url)
-    URL.revokeObjectURL(view.thumbUrl)
+    // Après le fondu de sortie du fond, qui affiche encore cette image un instant.
+    setTimeout(() => {
+      URL.revokeObjectURL(view.url)
+      URL.revokeObjectURL(view.thumbUrl)
+    }, 1500)
   }
   // On nettoie les réglages qui pointaient vers ce fond.
   const s = settingsStore.get()
@@ -194,6 +210,32 @@ export async function exportTheme(): Promise<Blob> {
   return new Blob([JSON.stringify(file)], { type: 'application/json' })
 }
 
+const HEX = /^#[0-9a-f]{6}$/i
+const ENUMS: Partial<Record<keyof Settings, string[]>> = {
+  theme: ['deep', 'light', 'pastel', 'neon', 'mono', 'amoled'],
+  animSpeed: ['slow', 'normal', 'fast', 'off'],
+  bgMode: ['dynamic', 'solid', 'image'],
+}
+
+/** Une valeur importée n'est acceptée que si elle a exactement la forme attendue. */
+function isValidSetting(key: keyof Settings, value: unknown): boolean {
+  if (value === undefined) return false
+  if (key === 'wallpaperId') return value === null || typeof value === 'string'
+  if (key === 'accent' || key === 'bgSolid') return typeof value === 'string' && HEX.test(value)
+  if (key === 'screenWallpapers') {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      !Array.isArray(value) &&
+      Object.values(value).every((v) => typeof v === 'string')
+    )
+  }
+  const allowed = ENUMS[key]
+  if (allowed) return typeof value === 'string' && allowed.includes(value)
+  if (typeof DEFAULTS[key] === 'number') return typeof value === 'number' && Number.isFinite(value)
+  return typeof value === typeof DEFAULTS[key]
+}
+
 /** Applique un fichier de thème. Lève une erreur lisible s'il n'est pas valide. */
 export async function importTheme(file: File) {
   let parsed: ThemeFile
@@ -207,7 +249,7 @@ export async function importTheme(file: File) {
   }
   const d = await db()
   for (const w of parsed.wallpapers ?? []) {
-    if (!w?.id || !/^data:(image|video)\//.test(w.data ?? '')) continue
+    if (!w?.id || !/^data:(image|video)\//.test(w.data ?? '') || !/^data:image\//.test(w.thumb ?? '')) continue
     await d.put('wallpapers', {
       id: w.id,
       kind: w.kind,
@@ -226,9 +268,7 @@ export async function importTheme(file: File) {
   const patch: Partial<Settings> = {}
   for (const k of THEME_KEYS) {
     const value = (parsed.settings as Record<string, unknown>)[k]
-    if (value !== undefined && (value === null || typeof value === typeof DEFAULTS[k] || DEFAULTS[k] === null)) {
-      ;(patch as Record<string, unknown>)[k] = value
-    }
+    if (isValidSetting(k, value)) (patch as Record<string, unknown>)[k] = value
   }
   setSettings(patch)
 }
