@@ -187,12 +187,18 @@ const fromDataUrl = async (data: string) => (await fetch(data)).blob()
 /** Seuil au-delà duquel on prévient que le fichier d'export est lourd. */
 export const HEAVY_EXPORT = 8 * 1024 * 1024
 
+/** Au-delà de cette taille, un fond (vidéo lourde) n'est pas mis dans l'export. */
+const MAX_EXPORTED = 12 * 1024 * 1024
+
 /** Construit le fichier JSON du thème, fonds d'écran encodés compris. */
-export async function exportTheme(): Promise<Blob> {
+export async function exportTheme(): Promise<{ blob: Blob; skipped: number }> {
   const s = settingsStore.get()
   const settings: Partial<Settings> = {}
   for (const k of THEME_KEYS) (settings as Record<string, unknown>)[k] = s[k]
-  const all = await (await db()).getAll('wallpapers')
+  const stored = await (await db()).getAll('wallpapers')
+  // Tout encoder en mémoire d'un coup peut faire fermer l'app : les fonds trop lourds restent
+  // sur le téléphone et ne partent pas dans le fichier.
+  const all = stored.filter((w) => w.blob.size <= MAX_EXPORTED)
   const file: ThemeFile = {
     app: 'epure',
     version: 1,
@@ -207,7 +213,10 @@ export async function exportTheme(): Promise<Blob> {
       })),
     ),
   }
-  return new Blob([JSON.stringify(file)], { type: 'application/json' })
+  return {
+    blob: new Blob([JSON.stringify(file)], { type: 'application/json' }),
+    skipped: stored.length - all.length,
+  }
 }
 
 const HEX = /^#[0-9a-f]{6}$/i

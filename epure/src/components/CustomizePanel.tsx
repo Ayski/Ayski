@@ -29,8 +29,10 @@ export function CustomizePanel({ open, onClose }: { open: boolean; onClose: () =
 
   const doExport = async () => {
     try {
-      const blob = await exportTheme()
-      if (blob.size > HEAVY_EXPORT) {
+      const { blob, skipped } = await exportTheme()
+      if (skipped) {
+        toast(`${skipped} fond${skipped > 1 ? 's' : ''} trop lourd${skipped > 1 ? 's' : ''} non inclus dans l’export.`, 5000)
+      } else if (blob.size > HEAVY_EXPORT) {
         toast(`Fichier lourd (${mb(blob.size)} Mo) : tes fonds d’écran sont inclus.`, 5000)
       }
       const file = new File([blob], 'epure-theme.json', { type: 'application/json' })
