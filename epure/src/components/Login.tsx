@@ -8,7 +8,7 @@ export function Login({ error }: { error: string | null }) {
   const [busy, setBusy] = useState(false)
   return (
     <main className="login">
-      <img className="login-mark" src="/favicon.svg" alt="" />
+      <img className="login-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
       <h1>Epure</h1>
       <p>Ta musique, sans le superflu. Une lecture intelligente qui ne te repasse pas toujours les mêmes titres.</p>
       {error && <p className="login-error">{error}</p>}

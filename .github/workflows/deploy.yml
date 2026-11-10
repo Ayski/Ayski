@@ -25,6 +25,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Epure (dossier epure/) est publiée dans le sous-dossier /epure/ du même site.
+      - name: Build Epure
+        working-directory: epure
+        env:
+          EPURE_BASE: /Ayski/epure/
+          VITE_SPOTIFY_CLIENT_ID: 9187c9dc1b274203932e2503ec186f3d
+          VITE_LASTFM_API_KEY: ${{ vars.VITE_LASTFM_API_KEY }}
+        run: |
+          npm ci
+          npm run build
+          cp -r dist ../dist/epure
       - uses: actions/configure-pages@v5
         with:
           enablement: true

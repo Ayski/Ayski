@@ -35,7 +35,30 @@ La redirect URI `http://127.0.0.1:5173/callback` doit figurer dans ton dashboard
 Autres commandes : `npm run build` (vérifie les types puis construit dans `dist/`),
 `npm run preview` (sert la version construite).
 
-## 3. Déployer sur Vercel (gratuit, faisable depuis l'iPhone)
+## 3. Mise en ligne
+
+### GitHub Pages (en place, automatique)
+
+Epure est publiée à chaque mise à jour de la branche `main`, à l'adresse :
+
+**https://ayski.github.io/Ayski/epure/**
+
+Une seule chose à faire, une fois, dans ton dashboard Spotify :
+
+1. [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) → ouvre ton app.
+2. **Settings** (ou *Edit*) → section **Redirect URIs**.
+3. Ajoute exactement `https://ayski.github.io/Ayski/epure/` (avec la barre oblique finale)
+   → **Add** → **Save** tout en bas.
+
+Garde aussi `http://127.0.0.1:5173/callback` pour le développement.
+
+Pour activer la découverte Last.fm : crée une clé sur
+[last.fm/api/account/create](https://www.last.fm/api/account/create), puis dans GitHub, dépôt
+`Ayski/Ayski` → **Settings → Secrets and variables → Actions → Variables → New repository
+variable**, nom `VITE_LASTFM_API_KEY`, valeur = ta clé. Elle sera prise en compte à la
+prochaine publication.
+
+### Vercel (autre possibilité)
 
 1. Va sur [vercel.com](https://vercel.com) → **Sign Up** → **Continue with GitHub**.
 2. **Add New… → Project** → importe le dépôt `Ayski/Ayski`.
@@ -53,7 +76,7 @@ Vercel met en ligne la branche `main`. Tant que ce code est sur une autre branch
 fusionnes dans `main`, soit tu changes la branche de production dans
 *Settings → Environments → Production → Branch Tracking*.
 
-### Ajouter l'adresse de retour dans Spotify (indispensable)
+#### Adresse de retour Spotify pour Vercel
 
 1. [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) → ouvre ton app.
 2. **Settings** (ou *Edit*) → section **Redirect URIs**.
@@ -62,7 +85,7 @@ fusionnes dans `main`, soit tu changes la branche de production dans
 
 Garde aussi `http://127.0.0.1:5173/callback` pour le développement.
 
-### Ajouter la clé Last.fm
+#### Clé Last.fm sur Vercel
 
 1. Crée la clé sur [last.fm/api/account/create](https://www.last.fm/api/account/create)
    (un nom d'application suffit, les autres champs sont facultatifs) et copie « API key ».
@@ -74,7 +97,7 @@ n'as jamais écoutés dans Epure.
 
 ## 4. Installer sur l'écran d'accueil de l'iPhone
 
-1. Ouvre l'adresse Vercel dans **Safari**.
+1. Ouvre **https://ayski.github.io/Ayski/epure/** dans **Safari**.
 2. Bouton **Partager** → **Sur l'écran d'accueil** → **Ajouter**.
 3. Lance Epure depuis l'icône : elle s'ouvre en plein écran, sans barre de navigation.
 4. Connecte-toi à Spotify **depuis l'app installée** (son stockage est séparé de celui de
