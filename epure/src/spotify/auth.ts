@@ -28,9 +28,16 @@ interface Tokens {
   expiresAt: number
 }
 
-/** L'URI de retour suit l'origine courante : 127.0.0.1:5173 en dev, le domaine Vercel en prod. */
+/** Dossier où l'app est publiée : "/" en dev et sur Vercel, "/Ayski/epure/" sur GitHub Pages. */
+const BASE = import.meta.env.BASE_URL
+
+/**
+ * L'URI de retour suit l'adresse courante. À la racine d'un domaine : /callback (dev, Vercel).
+ * Dans un sous-dossier (GitHub Pages, qui ne sait pas rediriger /callback vers l'app) :
+ * l'adresse de l'app elle-même.
+ */
 export function redirectUri(): string {
-  return `${window.location.origin}/callback`
+  return window.location.origin + (BASE === '/' ? '/callback' : BASE)
 }
 
 // --- petits utilitaires de stockage (Safari en navigation privée peut lever) ---
@@ -133,13 +140,14 @@ export function handleCallback(): Promise<string | null> {
 }
 
 async function exchangeCode(): Promise<string | null> {
-  if (window.location.pathname !== '/callback') return null
   const params = new URLSearchParams(window.location.search)
   const code = params.get('code')
   const error = params.get('error')
   const state = params.get('state')
+  // Retour de Spotify : l'adresse porte un code (ou une erreur) et un "state".
+  if (!state || (!code && !error)) return null
   // On nettoie l'URL quoi qu'il arrive pour ne pas rejouer le code au rechargement.
-  window.history.replaceState({}, '', '/')
+  window.history.replaceState({}, '', BASE)
 
   if (error) return error === 'access_denied' ? 'Connexion annulée.' : `Spotify a refusé la connexion (${error}).`
   const verifier = lsGet(K_VERIFIER)
