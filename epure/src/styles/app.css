@@ -214,8 +214,8 @@ a {
   place-items: center;
   perspective: 1100px;
   touch-action: none;
-  /* La pochette : jamais plus large que 72 % de l'écran ni plus haute que 44 % (dvh). */
-  --cover: calc(min(72vw, 44dvh) * var(--cover-scale));
+  /* La pochette : 66 % de l'écran au plus, pour laisser voir les voisines sur les côtés. */
+  --cover: calc(min(66vw, 44dvh) * var(--cover-scale));
 }
 .slot {
   position: absolute;

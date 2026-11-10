@@ -13,6 +13,10 @@ import { Icon } from './Icons'
 
 /** Décalage horizontal du carrousel, partagé avec le fond (effet parallaxe). */
 export const swipeX = motionValue(0)
+/** 0 → 1 quand le doigt se pose : les pochettes voisines s'écartent un peu, pour inviter au swipe. */
+const press = motionValue(0)
+/** Écart, en pixels, des pochettes voisines quand le doigt est posé. */
+const PEEK = 14
 
 interface Shown {
   prev: Track | null
@@ -22,14 +26,18 @@ interface Shown {
 }
 
 /** Position et aspect d'une pochette selon sa place (0 = centre) et le décalage en cours. */
-function place(el: HTMLElement, index: number, x: number, spacing: number) {
+function place(el: HTMLElement, index: number, x: number, spacing: number, empty: boolean) {
   const p = index + (spacing ? x / spacing : 0)
   const d = Math.abs(p)
-  const scale = 1 - 0.22 * Math.min(d, 1)
-  const opacity = d <= 1 ? 1 - 0.5 * d : Math.max(0, 0.5 * (2 - d))
-  el.style.transform = `translate3d(${p * spacing}px,0,0) rotateY(${-p * 16}deg) scale(${scale})`
+  const side = Math.min(d, 1)
+  // Les voisines restent en retrait derrière la pochette centrale : plus petites, un peu
+  // transparentes, et elles s'écartent légèrement dès que le doigt se pose.
+  const scale = 1 - 0.18 * side
+  const opacity = empty && index !== 0 ? 0 : d <= 1 ? 1 - 0.42 * d : Math.max(0, 0.58 * (2 - d))
+  const peek = Math.sign(p) * side * press.get() * PEEK
+  el.style.transform = `translate3d(${p * spacing + peek}px,0,${-side * 60}px) rotateY(${-p * 14}deg) scale(${scale})`
   el.style.opacity = String(opacity)
-  el.style.zIndex = String(10 - Math.round(d * 2))
+  el.style.zIndex = String(100 - Math.round(d * 40))
 }
 
 function Slot({
@@ -49,9 +57,16 @@ function Slot({
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    place(el, index, swipeX.get(), spacing)
-    return swipeX.on('change', (x) => place(el, index, x, spacing))
-  }, [index, spacing])
+    const empty = !track
+    const draw = () => place(el, index, swipeX.get(), spacing, empty)
+    draw()
+    const stopX = swipeX.on('change', draw)
+    const stopPress = press.on('change', draw)
+    return () => {
+      stopX()
+      stopPress()
+    }
+  }, [index, spacing, track])
 
   return (
     <div ref={ref} className="slot" onClick={onTap}>
@@ -87,7 +102,7 @@ export function Carousel({ onSwipeUp }: { onSwipeUp: () => void }) {
   useLayoutEffect(() => {
     const measure = () => {
       const slot = stage.current?.querySelector<HTMLElement>('.slot')
-      if (slot) setSpacing(slot.offsetWidth * 0.86)
+      if (slot) setSpacing(slot.offsetWidth * 0.8)
     }
     measure()
     const observer = new ResizeObserver(measure)
@@ -178,6 +193,12 @@ export function Carousel({ onSwipeUp }: { onSwipeUp: () => void }) {
     back()
   }
 
+  // Doigt posé : les voisines s'écartent ; doigt levé : elles reviennent.
+  const setPress = (value: number) => {
+    if (motionOff()) press.set(0)
+    else animate(press, value, { type: 'spring', stiffness: 380, damping: 26 })
+  }
+
   const tap = (dir: 1 | -1) => () => {
     if (!dragged.current && !animating.current) skip(dir)
   }
@@ -193,7 +214,16 @@ export function Carousel({ onSwipeUp }: { onSwipeUp: () => void }) {
   })
 
   return (
-    <motion.div ref={stage} className="stage" onPan={onPan} onPanEnd={onPanEnd}>
+    <motion.div
+      ref={stage}
+      className="stage"
+      onPan={onPan}
+      onPanEnd={onPanEnd}
+      onPointerDown={() => setPress(1)}
+      onPointerUp={() => setPress(0)}
+      onPointerCancel={() => setPress(0)}
+      onPointerLeave={() => setPress(0)}
+    >
       {slots.map((s) => (
         <Slot
           key={s.key}
