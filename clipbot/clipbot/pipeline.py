@@ -617,11 +617,14 @@ class Engine:
         # série entamée sur ce compte : on la termine, épisode par épisode, avant tout autre clip
         for r in db.q("SELECT DISTINCT series_id FROM clips WHERE account_id=? AND series_id IS NOT NULL "
                       "AND status IN ('uploading','uploaded_private','published')", [acc["id"]]):
-            if db.val("SELECT COUNT(*) FROM clips WHERE account_id=? AND series_id=? AND status IN "
-                      "('detected','transcribing','analyzing','editing','queued','uploading')", [acc["id"], r["series_id"]], 0):
-                nxt = [c for c in cands if c["series_id"] == r["series_id"]]     # épisodes suivants : écart court propre aux séries
+            nxt = [c for c in cands if c["series_id"] == r["series_id"]]         # épisodes suivants : écart court propre aux séries
+            if nxt:
                 ok = now - last >= aset["series_episode_gap_minutes"] * 60
-                return min(nxt, key=lambda c: (c["episode"] or 0, c["id"])) if nxt and ok else None
+                return min(nxt, key=lambda c: (c["episode"] or 0, c["id"])) if ok else None
+            # épisode suivant en cours de montage ou d'envoi : on patiente ; sinon rien ne bloque les autres clips
+            if db.val("SELECT COUNT(*) FROM clips WHERE account_id=? AND series_id=? AND status IN "
+                      "('detected','transcribing','analyzing','editing','uploading')", [acc["id"], r["series_id"]], 0):
+                return None
         if not gap_ok:
             return None
         ready_series = [c for c in cands if c["series_id"]]

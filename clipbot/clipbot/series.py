@@ -102,8 +102,10 @@ def can_upload(clip: dict) -> bool:
     acc_clause = "AND account_id IS ?" if clip.get("account_id") is None else "AND account_id=?"
     total = db.val("SELECT COUNT(*) FROM clips WHERE series_id=? AND status NOT IN ('rejected','deleted','failed') "
                    f"{acc_clause}", [clip["series_id"], clip.get("account_id")], 0)
-    if s and s["status"] == "open" and (total < 2 or settings.get("series_upload_complete")):
-        return False                    # histoire encore en cours : on attend d'avoir tous les épisodes
+    started = db.val("SELECT COUNT(*) FROM clips WHERE series_id=? AND status IN ('uploading','uploaded_private','published') "
+                     f"{acc_clause}", [clip["series_id"], clip.get("account_id")], 0)
+    if s and s["status"] == "open" and not started and (total < 2 or settings.get("series_upload_complete")):
+        return False                    # histoire encore en cours : on attend d'avoir tous les épisodes (sauf série déjà entamée)
     prev = db.q("SELECT status FROM clips WHERE series_id=? AND episode<? AND status NOT IN ('rejected','deleted','failed') "
                 f"{acc_clause}", [clip["series_id"], clip["episode"] or 1, clip.get("account_id")])
     return all(p["status"] in DONE for p in prev)

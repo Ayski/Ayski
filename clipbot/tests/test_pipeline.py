@@ -244,3 +244,21 @@ def test_story_follow_makes_next_episode_or_drops(eng, raw_video):
     eng.enqueue("tr", cid)
     c = drain(eng, cid)
     assert c["status"] == "rejected" and "histoire" in c["error"]      # pas de suite : écarté
+
+
+def test_started_open_series_never_blocks_the_queue(eng, raw_video):
+    """Un épisode déjà envoyé d'une série encore ouverte ne doit bloquer ni la suite de la série ni les autres clips."""
+    acc = db.insert("accounts", {"open_id": "t1", "name": "T", "lang": "fr", "connected": 1, "is_test": 1,
+                                 "settings": {"min_gap_minutes": 0, "series_episode_gap_minutes": 0},
+                                 "access_token": "x", "expires_at": time.time() + 9999})
+    settings.put({"test_upload": True})
+    sid = db.insert("series", {"streamer": "kameto", "title": "Le braquage", "hashtag": "x", "lang": "fr", "status": "open",
+                               "created_at": time.time(), "updated_at": time.time()})
+    e1, e2, solo = new_clip(raw_video, 1), new_clip(raw_video, 2), new_clip(raw_video, 3, streamer="autre")
+    db.clip_update(e1, status="uploaded_private", uploaded_at=time.time() - 3600, account_id=acc, series_id=sid, episode=1)
+    db.clip_update(e2, status="queued", account_id=acc, series_id=sid, episode=2)
+    db.clip_update(solo, status="queued", account_id=acc)
+    a = db.one("SELECT * FROM accounts WHERE id=?", [acc])
+    assert eng._pick(a, settings.all())["id"] == e2                    # la série entamée continue
+    db.clip_update(e2, next_try_at=time.time() + 3600)                 # épisode 2 en attente de nouvel essai
+    assert eng._pick(a, settings.all())["id"] == solo                  # … les autres clips passent quand même
