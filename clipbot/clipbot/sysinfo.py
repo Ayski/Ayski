@@ -19,8 +19,14 @@ def _run(cmd: list[str], timeout: float = 8) -> str:
         return ""
 
 
+@functools.lru_cache(maxsize=1)
 def ffmpeg_bin() -> str:
-    return os.environ.get("FFMPEG_BIN") or shutil.which("ffmpeg") or "ffmpeg"
+    found = os.environ.get("FFMPEG_BIN") or shutil.which("ffmpeg")
+    if not found and platform.system() == "Windows":      # installé par winget mais PATH pas encore rafraîchi
+        base = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft/WinGet"
+        cands = [base / "Links/ffmpeg.exe", *base.glob("Packages/Gyan.FFmpeg*/**/bin/ffmpeg.exe")]
+        found = next((str(c) for c in cands if c.exists()), None)
+    return found or "ffmpeg"
 
 
 def cpu_name() -> str:

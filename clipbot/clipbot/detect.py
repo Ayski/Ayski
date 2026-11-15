@@ -48,8 +48,10 @@ class Moment:
 
 
 def combine(sig: dict, w: dict) -> float:
-    den = sum(w.get(k, 0) for k in BASE) + w.get("keywords", 0)
-    base = sum(w.get(k, 0) * sig.get(k, 0) for k in BASE + ("keywords",)) / max(den, 1e-6)
+    # sans chat (VOD de test, chat muet) : on ne pénalise pas le score, les poids restants sont renormalisés
+    keys = [k for k in BASE + ("keywords",) if not (sig.get("nochat") and k in ("chat", "emotes"))]
+    den = sum(w.get(k, 0) for k in keys)
+    base = sum(w.get(k, 0) * sig.get(k, 0) for k in keys) / max(den, 1e-6)
     return max(0.0, min(1.0, base + w.get("viewer_clip", 0) * sig.get("viewer_clip", 0)))
 
 
@@ -102,7 +104,8 @@ class Detector:
         self.chat_rate.add(float(n1))
         self.react_rate.add(float(r1))
         clip = 1.0 if any(c - 30 <= sec <= c - 3 for c in self.clip_marks) else 0.0
-        return {"audio": r["audio"], "motion": r["motion"], "chat": chat, "emotes": emo, "viewer_clip": clip}
+        nochat = 1 if self.chat_rate.n >= 30 and self.chat_rate.mean < 0.002 else 0
+        return {"audio": r["audio"], "motion": r["motion"], "chat": chat, "emotes": emo, "viewer_clip": clip, "nochat": nochat}
 
     def step(self, now: float, cfg: dict) -> list[Moment]:
         """Avance jusqu'à (now - latence) et renvoie les moments terminés."""
@@ -115,7 +118,7 @@ class Detector:
             self.cursor = min(self.raw)
         den = sum(w.get(k, 0) for k in BASE) + w.get("keywords", 0)
         kw_share = w.get("keywords", 0) / max(den, 1e-6)
-        t_on = thr * (1 - 0.6 * kw_share)          # les mots-clés ne sont connus qu'après transcription
+        t_on = thr * (1 - 0.8 * kw_share)          # les mots-clés ne sont connus qu'après transcription
         t_off = t_on * 0.5
         out: list[Moment] = []
         while self.cursor <= horizon and self.cursor <= max(self.raw):
@@ -148,7 +151,7 @@ class Detector:
                     end = clip_start + cfg["min_duration"]
                 secs = range(int(a["start"]), int(a["last_above"]) + 1)
                 sigs = {k: round(max((self.timeline.get(s, {}).get(k, 0) for s in secs), default=0.0), 3)
-                        for k in BASE + ("viewer_clip",)}
+                        for k in BASE + ("viewer_clip", "nochat")}
                 top = sorted(a["vals"], reverse=True)[:3]
                 out.append(Moment(clip_start, end, a["peak_t"], round(sum(top) / len(top), 3), sigs,
                                   [p for p in a["peaks"] if clip_start <= p <= end]))

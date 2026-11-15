@@ -329,7 +329,10 @@ class Engine:
             self.modules["surveillance"] = {"state": "ok", "detail": f"{len(live_all)} streams « {cfg['game']} » en direct"}
         elif not self.test_sources:
             self.modules["surveillance"] = {"state": "attente", "detail": "Clés Twitch manquantes (Système → Clés API)"}
+            self.modules["détection"] = {"state": "attente", "detail": ""}
             return
+        else:
+            self.modules["surveillance"] = {"state": "ok", "detail": "flux de test uniquement (clés Twitch manquantes)"}
         keep = dict(sorted(wanted.items(), key=lambda kv: kv[1]["rank"])[: self.max_streams(cfg)])
         for login in [l for l in self.workers if l not in keep]:
             self._stop_worker(login)

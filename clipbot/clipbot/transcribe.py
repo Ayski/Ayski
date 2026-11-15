@@ -1,6 +1,8 @@
 """Transcription mot à mot avec faster-whisper (modèle choisi selon le PC, téléchargé au premier usage)."""
 import threading
 
+from pathlib import Path
+
 from . import paths, settings, sysinfo
 from .logbus import log, warn
 
@@ -9,6 +11,24 @@ _model_key = None
 _lock = threading.Lock()
 _failed_until = 0.0
 state = {"model": "", "device": "", "ready": False, "error": ""}
+
+
+def _cuda_dlls() -> None:
+    """Rend visibles les bibliothèques NVIDIA installées par pip (cuBLAS / cuDNN)."""
+    import os
+    import site
+    import sys
+    for sp in site.getsitepackages():
+        root = Path(sp) / "nvidia"
+        if not root.is_dir():
+            continue
+        for d in list(root.glob("*/bin")) + list(root.glob("*/lib")):
+            if sys.platform == "win32":
+                try:
+                    os.add_dll_directory(str(d))
+                except OSError:
+                    pass
+                os.environ["PATH"] = str(d) + os.pathsep + os.environ.get("PATH", "")
 
 
 def _load():
@@ -23,6 +43,7 @@ def _load():
         return _model
     if time.time() < _failed_until:
         return None
+    _cuda_dlls()
     from faster_whisper import WhisperModel
     attempts = [(rec["whisper_device"], "float16")] if rec["whisper_device"] == "cuda" else []
     attempts.append(("cpu", "int8"))

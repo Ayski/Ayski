@@ -44,7 +44,8 @@ class EditJob:
 
 
 def probe(path: str) -> dict:
-    ffprobe = shutil.which("ffprobe") or sysinfo.ffmpeg_bin().replace("ffmpeg", "ffprobe")
+    ff = Path(sysinfo.ffmpeg_bin())
+    ffprobe = shutil.which("ffprobe") or str(ff.with_name(ff.name.replace("ffmpeg", "ffprobe")))
     r = subprocess.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
                         "stream=width,height:format=duration", "-of", "csv=p=0", str(path)],
                        capture_output=True, text=True, timeout=30)
@@ -186,14 +187,14 @@ def render(job: EditJob) -> dict:
     f.append("[lay]ass=subs.ass:fontsdir=fonts[v]")
     f.append("[ac]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000,"
              f"afade=t=out:st={max(0, duration - 0.12):.2f}:d=0.12[a]")
-    (work / "graph.txt").write_text(";\n".join(f), encoding="utf-8")
+    graph = ";".join(f)
 
     out = Path(job.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp.mp4")
     def cmd() -> list[str]:
         return [sysinfo.ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(Path(job.raw).resolve()),
-                "-filter_complex_script", "graph.txt", "-map", "[v]", "-map", "[a]", *_encoder_args(job),
+                "-filter_complex", graph, "-map", "[v]", "-map", "[a]", *_encoder_args(job),
                 "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", "-t", f"{duration:.3f}",
                 str(tmp.resolve())]
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0

@@ -42,7 +42,7 @@ def audio_levels(samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def keyframes(path: str, timeout: float = 60) -> np.ndarray:
     """Images clés en niveaux de gris 96x54 (très peu coûteux : on ne décode que les images clés)."""
     cmd = [ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-nostdin", "-skip_frame", "nokey", "-i", str(path),
-           "-an", "-vf", f"scale={FW}:{FH}", "-vsync", "0", "-pix_fmt", "gray", "-f", "rawvideo", "-"]
+           "-an", "-vf", f"scale={FW}:{FH}", "-fps_mode", "passthrough", "-pix_fmt", "gray", "-f", "rawvideo", "-"]
     r = subprocess.run(cmd, capture_output=True, timeout=timeout, creationflags=_FLAGS)
     k = len(r.stdout) // (FW * FH)
     return np.frombuffer(r.stdout[: k * FW * FH], dtype=np.uint8).reshape(k, FH, FW).astype(np.float32)
