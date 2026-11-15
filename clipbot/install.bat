@@ -2,6 +2,7 @@
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
+set "PYTHONUTF8=1"
 rem --- Dossier des clips et des telechargements : E:\GTA 6 clip (si le disque E existe) ---
 if not defined CLIPBOT_DATA if exist E:\ (
   if not exist "E:\GTA 6 clip" mkdir "E:\GTA 6 clip"

@@ -103,11 +103,11 @@ class StreamCapture:
         lst = self.dir / f"s{self.session:03d}.csv"
         if not lst.exists():
             return pos
-        with open(lst, "r", encoding="utf-8", errors="ignore") as f:
+        with open(lst, "rb") as f:          # binaire : la position reste exacte même avec des fins de ligne Windows
             f.seek(pos)
-            data = f.read()
-        if not data.endswith("\n"):
-            data = data[: data.rfind("\n") + 1]
+            raw = f.read()
+        raw = raw[: raw.rfind(b"\n") + 1]
+        data = raw.decode("utf-8", errors="ignore")
         now = time.time()
         for line in data.splitlines():
             p = line.strip().split(",")
@@ -126,7 +126,7 @@ class StreamCapture:
             with self.lock:
                 self.segments.append(Segment(path, self.session, s, e, now))
             self.last_segment_at = now
-        return pos + len(data.encode("utf-8"))
+        return pos + len(raw)
 
     def _prune(self) -> None:
         keep = settings.get("buffer_seconds") + 60
@@ -135,7 +135,10 @@ class StreamCapture:
             old = [s for s in self.segments if now - s.seen > keep]
             self.segments = [s for s in self.segments if now - s.seen <= keep]
         for s in old:
-            s.path.unlink(missing_ok=True)
+            try:
+                s.path.unlink(missing_ok=True)
+            except OSError:                 # Windows : fichier encore ouvert par ffmpeg, supprimé au prochain nettoyage
+                pass
 
     def _run(self) -> None:
         backoff = 3

@@ -9,14 +9,14 @@ os.environ["CLIPBOT_ENV"] = str(Path(_tmp) / ".env")
 
 import pytest  # noqa: E402
 
-from clipbot import db, paths  # noqa: E402
+from clipbot import db, paths, sysinfo  # noqa: E402
 
 
 @pytest.fixture(scope="session")
 def raw_video() -> str:
     """Vidéo brute de 30 s : calme puis bruit fort + mouvement entre 8 et 20 s."""
     out = Path(_tmp) / "raw_src.mp4"
-    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+    subprocess.run([sysinfo.ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
                     "testsrc2=size=1280x720:rate=30:duration=30", "-f", "lavfi", "-i", "anoisesrc=color=pink:amplitude=0.02:duration=30",
                     "-f", "lavfi", "-i", "sine=frequency=1500:duration=30", "-filter_complex",
                     "[2:a]volume='if(between(t,8,20),0.5,0)':eval=frame[s];[1:a][s]amix=inputs=2:normalize=0[a]",

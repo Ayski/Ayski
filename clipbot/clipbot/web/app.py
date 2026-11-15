@@ -551,11 +551,14 @@ def clip_delete(clip_id: int):
     c = _clip(clip_id)
     if c["status"] == "uploading":
         raise HTTPException(400, "Clip en cours d'upload")
-    for p in (c["final_path"], c["thumb_path"]):
-        if p:
-            Path(p).unlink(missing_ok=True)
-    if c["final_path"]:
-        Path(c["final_path"]).with_suffix(".txt").unlink(missing_ok=True)
+    try:
+        for p in (c["final_path"], c["thumb_path"]):
+            if p:
+                Path(p).unlink(missing_ok=True)
+        if c["final_path"]:
+            Path(c["final_path"]).with_suffix(".txt").unlink(missing_ok=True)
+    except OSError:
+        raise HTTPException(409, "Le fichier est ouvert ailleurs (lecteur vidéo ?). Ferme-le puis réessaie.")
     db.clip_update(clip_id, status="deleted", final_path=None, thumb_path=None)
     return {"ok": True}
 

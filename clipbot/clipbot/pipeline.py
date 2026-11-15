@@ -18,6 +18,14 @@ def _slug(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (s or "clip").lower().encode("ascii", "ignore").decode())[:40].strip("-") or "clip"
 
 
+def _rm(p) -> None:
+    """Suppression tolérante : sous Windows un fichier ouvert (lecteur vidéo, ffmpeg) ne peut pas être supprimé."""
+    try:
+        Path(p).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def day_start() -> float:
     lt = time.localtime()
     return time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
@@ -195,7 +203,7 @@ class Engine:
         shutil.rmtree(paths.WORK, ignore_errors=True)
         paths.ensure_dirs()
         for f in paths.CLIPS.rglob("*.tmp.mp4"):
-            f.unlink(missing_ok=True)
+            _rm(f)
         db.ex("UPDATE streamers SET is_live=0")
 
     def _resume(self) -> None:
@@ -532,8 +540,8 @@ class Engine:
         t0 = time.time()
         res = editor.render(job)
         if c["final_path"] and c["final_path"] != str(out):
-            Path(c["final_path"]).unlink(missing_ok=True)
-            Path(c["final_path"]).with_suffix(".txt").unlink(missing_ok=True)
+            _rm(c["final_path"])
+            _rm(Path(c["final_path"]).with_suffix(".txt"))
         self._write_description(c, aset)
         c = db.one("SELECT * FROM clips WHERE id=?", [clip_id])
         out.with_suffix(".txt").write_text(c["description"] or "", encoding="utf-8")
@@ -668,7 +676,7 @@ class Engine:
                     age_h = (now - max(c["updated_at"] or now for c in cl)) / 3600
                     dead = all(c["status"] in ("rejected", "deleted", "failed") for c in cl)
                     if age_h > (cfg["keep_rejected_hours"] if dead else cfg["keep_raw_hours"]):
-                        Path(r["raw_path"]).unlink(missing_ok=True)
+                        _rm(r["raw_path"])
                         db.ex("UPDATE clips SET raw_path=NULL WHERE raw_path=?", [r["raw_path"]])
                 for d in paths.WORK.iterdir() if paths.WORK.exists() else []:
                     if now - d.stat().st_mtime > 3600:
@@ -723,8 +731,10 @@ class Engine:
                     out.parent.mkdir(parents=True, exist_ok=True)
                     import subprocess, sys
                     r = subprocess.run([sys.executable, "-m", "yt_dlp", "-f", "best[height<=720]/best", "--download-sections",
-                                        f"*0-{minutes * 60}", "--force-overwrites", "-o", str(out), source],
-                                       capture_output=True, text=True, timeout=3600)
+                                        f"*0-{minutes * 60}", "--force-overwrites",
+                                        "--ffmpeg-location", sysinfo.ffmpeg_bin(), "-o", str(out), source],
+                                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3600,
+                                       creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
                     if r.returncode != 0 or not out.exists():
                         raise RuntimeError((r.stderr or "téléchargement impossible").strip()[-300:])
                     path = str(out)

@@ -48,7 +48,8 @@ def probe(path: str) -> dict:
     ffprobe = shutil.which("ffprobe") or str(ff.with_name(ff.name.replace("ffmpeg", "ffprobe")))
     r = subprocess.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
                         "stream=width,height:format=duration", "-of", "csv=p=0", str(path)],
-                       capture_output=True, text=True, timeout=30)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+                       creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
     vals = [x for x in r.stdout.replace("\n", ",").split(",") if x.strip()]
     try:
         return {"w": int(vals[0]), "h": int(vals[1]), "duration": float(vals[2])}
@@ -199,11 +200,11 @@ def render(job: EditJob) -> dict:
                 str(tmp.resolve())]
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     try:
-        r = subprocess.run(cmd(), cwd=work, capture_output=True, text=True, timeout=900, creationflags=flags)
+        r = subprocess.run(cmd(), cwd=work, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900, creationflags=flags)
         if r.returncode != 0 and job.encoder in ("auto", "", None) and sysinfo.best_encoder() != "libx264":
             warn("montage", "Encodeur matériel en échec, bascule sur le CPU (libx264)")
             job.encoder = "libx264"
-            r = subprocess.run(cmd(), cwd=work, capture_output=True, text=True, timeout=900, creationflags=flags)
+            r = subprocess.run(cmd(), cwd=work, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900, creationflags=flags)
         if r.returncode != 0 or not tmp.exists():
             raise RuntimeError(f"ffmpeg : {r.stderr.strip()[-600:]}")
         tmp.replace(out)

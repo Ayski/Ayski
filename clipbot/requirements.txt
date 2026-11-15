@@ -12,3 +12,4 @@ streamlink>=6.8
 yt-dlp>=2024.8.6
 faster-whisper>=1.0.3
 anthropic>=0.60
+pytest>=8.0

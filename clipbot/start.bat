@@ -1,6 +1,7 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
+set "PYTHONUTF8=1"
 rem --- Dossier des clips et des telechargements : E:\GTA 6 clip (si le disque E existe) ---
 if not defined CLIPBOT_DATA if exist E:\ (
   if not exist "E:\GTA 6 clip" mkdir "E:\GTA 6 clip"
@@ -10,6 +11,10 @@ if not defined CLIPBOT_DATA if exist E:\ (
 if not exist ".venv\Scripts\python.exe" (
   echo Premier lancement : installation...
   call install.bat
+)
+if not exist ".venv\Scripts\python.exe" (
+  echo [!] L'installation n'a pas abouti. Corrige le probleme indique ci-dessus puis relance start.bat.
+  pause & exit /b 1
 )
 title ClipBot
 :loop

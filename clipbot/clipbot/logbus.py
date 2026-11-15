@@ -12,7 +12,10 @@ def log(module: str, msg: str, level: str = "info") -> None:
         db.insert("logs", {"ts": time.time(), "level": level, "module": module, "msg": str(msg)[:2000]})
     except Exception:
         pass
-    print(f"[{time.strftime('%H:%M:%S')}] {level.upper():5} {module}: {msg}", file=sys.stderr, flush=True)
+    try:
+        print(f"[{time.strftime('%H:%M:%S')}] {level.upper():5} {module}: {msg}", file=sys.stderr, flush=True)
+    except (UnicodeError, OSError):
+        pass
 
 
 def warn(module: str, msg: str) -> None:
