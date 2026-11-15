@@ -51,7 +51,9 @@ async function galleryTab(body) {
     clear(grid, h('div', { class: 'clip-grid' }, r.clips.map(c => h('button', { class: 'clip', onclick: () => openClip(c.id, () => paint(true)) }, clipThumb(c),
       h('div', { class: 'meta' }, h('b', null, c.title || (STEP[c.status] ? 'Clip en préparation…' : 'Sans titre')),
         h('span', { class: 'muted tiny ell' }, `${c.streamer} · ${fmt.dur(c.duration)}${c.category ? ' · ' + (CATS[c.category] || c.category) : ''}`),
-        h('span', { class: 'muted tiny' }, fmt.date(c.created_at)))))));
+        h('span', { class: 'muted tiny' }, fmt.date(c.created_at)),
+        c.status === 'uploaded_private' && c.description ? h('span', { class: 'btn sm', role: 'button', tabindex: 0, style: { marginTop: '6px' },
+          onclick: e => { e.stopPropagation(); copyText(c.description); } }, 'Copier la description') : null)))));
     clear(more, r.total > r.clips.length ? h('button', { class: 'btn', onclick: () => { f.limit += 60; paint(); } }, 'Afficher plus') : null);
   }
   await paint();
@@ -108,6 +110,7 @@ async function openClip(id, onChange) {
         a.description ? h('div', null, h('h3', null, 'Ce que l\'IA a vu'), h('p', { style: { margin: 0 } }, a.description)) : null,
         h('div', { class: 'form-grid' }, F.text('Titre (incrusté dans la vidéo)', c.title, v => d.set('title', v)), F.text('Hook (1re seconde)', c.hook, v => d.set('hook', v))),
         F.textarea('Description TikTok', c.description, v => d.set('description', v), { rows: 4, help: 'Le crédit « 🎥 twitch.tv/… » est obligatoire : il est remis automatiquement s\'il manque.' }),
+        c.description ? h('button', { class: 'btn sm', type: 'button', style: { alignSelf: 'flex-start' }, onclick: () => copyText(d.get('description') || c.description) }, 'Copier la description') : null,
         h('div', { class: 'form-grid' }, F.text('Hashtags (6 maximum)', (c.hashtags || []).join(' '), v => d.set('hashtags', v), { placeholder: 'gta gaming fyp' }),
           F.select('Compte TikTok de destination', c.account_id ?? '', accOpts, v => d.set('account_id', v))),
         h('div', { id: 'reedit-hint' }),

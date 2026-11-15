@@ -63,6 +63,16 @@ async function api(method, path, body) {
 }
 const GET = p => api('GET', p), POST = (p, b) => api('POST', p, b === undefined ? {} : b), PUT = (p, b) => api('PUT', p, b), DEL = p => api('DELETE', p);
 
+// Copie dans le presse-papiers (fonctionne aussi sur téléphone en http, où navigator.clipboard est indisponible)
+async function copyText(text) {
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return toast('Description copiée'); } } catch (e) { /* repli ci-dessous */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  ta.remove();
+  toast(ok ? 'Description copiée' : 'Copie impossible : sélectionne le texte à la main', ok ? undefined : 'bad');
+}
 function toast(msg, kind) {
   const t = h('div', { class: 'toast ' + (kind || ''), role: 'status' }, msg);
   document.getElementById('toasts').append(t);
