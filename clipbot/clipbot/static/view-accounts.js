@@ -17,12 +17,12 @@ App.views.comptes = async function (main, parts, params) {
 };
 
 async function accountsTab(body) {
-  const manual = h('input', { type: 'url', placeholder: 'http://localhost:8080/api/tiktok/callback?code=…&state=…', 'aria-label': 'Adresse de retour TikTok' });
+  const manual = h('input', { type: 'url', placeholder: 'http://localhost:8080/callback/?code=…&state=…', 'aria-label': 'Adresse de retour TikTok' });
   const connect = h('div', { class: 'card stack', style: { marginBottom: '18px', gap: '12px' } },
     !App.tiktokReady ? h('div', { class: 'banner info', style: { margin: 0 } }, h('span', null, 'Avant de connecter un compte, ajoute les clés de ton application TikTok. ', h('a', { href: '#/systeme' }, 'Ouvrir Système → Clés API (guide pas à pas)'))) : null,
     h('div', { class: 'row' },
       h('button', { class: 'btn primary', disabled: !App.tiktokReady, onclick: e => act(e.currentTarget, async () => { const r = await GET('/api/tiktok/connect'); location.href = r.url; }) }, icon('plus'), 'Connecter un compte TikTok'),
-      h('span', { class: 'muted small grow' }, 'TikTok s\'ouvre, tu autorises l\'application, puis tu reviens ici. À faire sur le PC où tourne le bot.')),
+      h('span', { class: 'muted small grow', style: { minWidth: '200px' } }, 'TikTok s\'ouvre, tu autorises l\'application, puis tu reviens ici. À faire sur le PC où tourne le bot.')),
     h('details', { class: 'guide' }, h('summary', null, 'La page de retour ne s\'ouvre pas ? (connexion depuis le téléphone)'),
       h('div', { class: 'stack', style: { padding: '4px 14px 14px', gap: '10px' } },
         h('p', { class: 'muted small', style: { margin: 0 } }, 'Après avoir autorisé, copie l\'adresse complète affichée dans la barre du navigateur (elle contient « code= ») et colle-la ici.'),
@@ -133,7 +133,7 @@ async function statsTab(body) {
         chartCard('Nouveaux abonnés par semaine', 'bar', s.weekly.map(w => w.week.replace(/^\d+-/, '')), s.weekly.map(w => w.new_followers), { label: 'Abonnés', color: INK.b, small: true })),
       h('h3', { style: { marginTop: '24px' } }, 'Ce qui marche le mieux (vues moyennes par vidéo)'),
       h('div', { class: 'grid g2' }, bars('Par streamer', s.by_streamer.slice(0, 8)), bars('Par catégorie', s.by_category, k => CATS[k] || k), bars('Par durée', s.by_duration),
-        bars('Par heure de publication', s.by_hour.slice().sort((a, b) => a.key - b.key), k => k + ' h'), bars('Séries ou clips isolés', s.by_series)),
+        (hs => chartCard('Par heure de publication', 'bar', hs.map(r => r.key + ' h'), hs.map(r => r.avg_views), { label: 'Vues moyennes', small: true }))(s.by_hour.slice().sort((a, b) => a.key - b.key)), bars('Séries ou clips isolés', s.by_series)),
       h('h3', { style: { marginTop: '24px' } }, 'Top vidéos'),
       s.top.length ? h('div', { class: 'card', style: { padding: '6px 8px' } }, h('div', { class: 'table-wrap' }, h('table', null,
         h('thead', null, h('tr', null, ['Vidéo', 'Streamer', 'Vues', 'Likes', 'Comm.', 'Partages'].map((x, i) => h('th', { class: i > 1 ? 'r' : '' }, x)))),

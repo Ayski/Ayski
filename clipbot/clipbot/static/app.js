@@ -72,7 +72,7 @@ const App = {
     this.nav.querySelectorAll('.nav-item').forEach(a => { const on = a.dataset.k === view; a.classList.toggle('active', on); on ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'); });
     clear(this.main, loading());
     window.scrollTo(0, 0);
-    Promise.resolve(this.views[view](this.main, parts.slice(1), params)).catch(e => { if (e.status !== 401) clear(this.main, empty('Impossible d\'afficher cette page', e.message)); });
+    Promise.resolve(this.views[view](this.main, parts.slice(1), params)).catch(e => { if (!e.silent) clear(this.main, empty('Impossible d\'afficher cette page', e.message)); });
   },
 };
 document.addEventListener('DOMContentLoaded', () => App.boot());

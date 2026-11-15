@@ -44,6 +44,9 @@ def _load():
     if time.time() < _failed_until:
         return None
     _cuda_dlls()
+    import os
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")       # téléchargement HTTP classique, plus robuste
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     from faster_whisper import WhisperModel
     attempts = [(rec["whisper_device"], "float16")] if rec["whisper_device"] == "cuda" else []
     attempts.append(("cpu", "int8"))
@@ -70,18 +73,22 @@ def transcribe(path: str, lang_hint: str | None = None) -> dict:
         if m is None:
             return empty
         try:
-            segs, info = m.transcribe(str(path), language=None, word_timestamps=True, vad_filter=True,
+            from . import analyze
+            audio = analyze.pcm(str(path), timeout=180)      # décodage par ffmpeg (16 kHz mono), indépendant de PyAV
+            if len(audio) < 1600:
+                return empty
+            segs, info = m.transcribe(audio, language=None, word_timestamps=True, vad_filter=True,
                                       beam_size=2, condition_on_previous_text=False)
             lang = info.language if info.language_probability > 0.6 or not lang_hint else lang_hint
             words, segments = [], []
             for s in segs:
                 if s.no_speech_prob > 0.8:
                     continue
-                segments.append({"s": round(s.start, 2), "e": round(s.end, 2), "text": s.text.strip()})
+                segments.append({"s": round(float(s.start), 2), "e": round(float(s.end), 2), "text": s.text.strip()})
                 for w in s.words or []:
                     t = w.word.strip()
                     if t:
-                        words.append({"w": t, "s": round(w.start, 2), "e": round(w.end, 2)})
+                        words.append({"w": t, "s": round(float(w.start), 2), "e": round(float(w.end), 2)})
             return {"language": lang, "text": " ".join(x["text"] for x in segments), "words": words, "segments": segments}
         except Exception as e:
             warn("whisper", f"Transcription échouée : {e}")

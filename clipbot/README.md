@@ -54,8 +54,9 @@ Sans clé TikTok, les clips restent sur ton PC.
 1. Va sur **developers.tiktok.com**, crée un compte développeur, puis **Manage apps → Connect an app**.
 2. Ajoute les produits **Login Kit** et **Content Posting API** (active **Direct Post**).
 3. Scopes à cocher : `user.info.basic`, `user.info.profile`, `user.info.stats`, `video.list`, `video.publish`, `video.upload`.
-4. Plateforme **Desktop**, Redirect URI : `http://localhost:8080/api/tiktok/callback` (l'application te l'affiche à copier).
+4. Plateforme **Desktop**, Redirect URI : `http://localhost:8080/callback/` (l'application te l'affiche à copier).
 5. Dans l'onglet **Sandbox**, ajoute ton compte TikTok comme **Target user**.
+   Dans l'appli TikTok, passe ce compte en **compte privé** (Paramètres → Confidentialité) : TikTok l'exige tant que ton app n'est pas auditée.
 6. Copie **Client key** et **Client secret** dans l'application, puis *Comptes TikTok → Connecter un compte*.
 
 > Tant que ton app TikTok n'est pas « auditée » par TikTok, elle ne peut publier **qu'en privé** (visible par toi seul).

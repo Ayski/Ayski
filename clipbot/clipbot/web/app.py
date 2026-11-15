@@ -20,7 +20,7 @@ from ..pipeline import engine
 
 COOKIE = "clipbot_session"
 SESSION_DAYS = 30
-OPEN_PATHS = {"/api/auth/state", "/api/auth/setup", "/api/auth/login", "/api/tiktok/callback"}
+OPEN_PATHS = {"/api/auth/state", "/api/auth/setup", "/api/auth/login", "/api/tiktok/callback", "/callback/", "/callback"}
 _fails: dict[str, list[float]] = {}
 
 
@@ -349,7 +349,7 @@ def del_account(acc_id: int, forget: int = 0):
 
 def _redirect_uri(request: Request) -> str:
     port = request.url.port or 8080
-    return f"http://localhost:{port}/api/tiktok/callback"
+    return f"http://localhost:{port}/callback/"       # format recommandé par TikTok pour les apps « Desktop »
 
 
 @app.get("/api/tiktok/connect")
@@ -360,6 +360,8 @@ def tiktok_connect(request: Request):
         raise HTTPException(400, str(e))
 
 
+@app.get("/callback")
+@app.get("/callback/")
 @app.get("/api/tiktok/callback")
 def tiktok_callback(code: str = "", state: str = "", error: str = "", error_description: str = ""):
     if error or not code:
@@ -407,7 +409,7 @@ def recs_apply(acc_id: int):
 
 # ------------------------------------------------------------------ clips
 CLIP_LIST = ("id,streamer,lang,created_at,duration,status,score,rating,category,title,hook,description,hashtags,series_id,episode,"
-             "account_id,target_lang,parent_id,feedback,feedback_reason,error,uploaded_at,video_id,signals,force_upload,"
+             "account_id,target_lang,parent_id,feedback,feedback_reason,error,uploaded_at,updated_at,video_id,signals,force_upload,"
              "(raw_path IS NOT NULL) AS can_reedit")
 
 

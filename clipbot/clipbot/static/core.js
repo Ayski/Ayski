@@ -45,7 +45,7 @@ function icon(name) {
 }
 
 /* ---------- API ---------- */
-class ApiError extends Error { constructor(msg, status) { super(msg); this.status = status; } }
+class ApiError extends Error { constructor(msg, status, silent) { super(msg); this.status = status; this.silent = !!silent; } }
 async function api(method, path, body) {
   const opt = { method, credentials: 'same-origin', headers: {} };
   if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
@@ -53,7 +53,7 @@ async function api(method, path, body) {
   try { r = await fetch(path, opt); } catch (e) { throw new ApiError('Le bot ne répond pas. Est-il toujours lancé sur le PC ?', 0); }
   let data = null;
   try { data = await r.json(); } catch (e) { /* pas de JSON */ }
-  if (r.status === 401 && !path.startsWith('/api/auth/')) { App.showAuth(); throw new ApiError('Connexion requise', 401); }
+  if (r.status === 401 && !path.startsWith('/api/auth/')) { App.showAuth(); throw new ApiError('Connexion requise', 401, true); }
   if (!r.ok) {
     let d = data && data.detail;
     if (Array.isArray(d)) d = d.map(x => x.msg).join(', ');
@@ -68,7 +68,7 @@ function toast(msg, kind) {
   document.getElementById('toasts').append(t);
   setTimeout(() => t.remove(), kind === 'err' ? 7000 : 3500);
 }
-const oops = e => { if (e.status !== 401) toast(e.message || String(e), 'err'); };
+const oops = e => { if (!e.silent) toast(e.message || String(e), 'err'); };
 /** Exécute une action asynchrone liée à un bouton : désactive, affiche erreur ou succès. */
 async function act(btn, fn, okMsg) {
   if (btn) btn.disabled = true;
@@ -119,7 +119,7 @@ function field(label, control, help) {
 const F = {
   text: (label, value, on, o = {}) => field(label, h('input', { type: o.type || 'text', value: value ?? '', placeholder: o.placeholder, autocomplete: o.autocomplete || 'off', oninput: e => on(e.target.value) }), o.help),
   number: (label, value, on, o = {}) => field(label, h('input', { type: 'number', value: value ?? '', min: o.min, max: o.max, step: o.step || 1, placeholder: o.placeholder, inputmode: 'decimal',
-    oninput: e => { const v = e.target.value === '' ? (o.nullable ? null : undefined) : Number(e.target.value); if (v !== undefined && !Number.isNaN(v)) on(v); } }), o.help),
+    [o.lazy ? 'onchange' : 'oninput']: e => { const v = e.target.value === '' ? (o.nullable ? null : undefined) : Number(e.target.value); if (v !== undefined && !Number.isNaN(v)) on(v); } }), o.help),
   range: (label, value, on, o = {}) => {
     const out = h('output', null, (o.fmt || String)(value));
     const inp = h('input', { type: 'range', min: o.min ?? 0, max: o.max ?? 1, step: o.step ?? 0.01, value, 'aria-label': label,
@@ -163,8 +163,8 @@ function chart(canvas, type, labels, data, o = {}) {
       interaction: { mode: 'index', intersect: false, axis: o.horizontal ? 'y' : 'x' },
       plugins: { legend: { display: false }, tooltip: { backgroundColor: '#222838', borderColor: '#262c3b', borderWidth: 1, titleColor: '#e9ecf3', bodyColor: '#e9ecf3', padding: 10,
         callbacks: { label: ctx => ` ${o.label || ''} : ${(o.fmt || fmt.n)(o.horizontal ? ctx.parsed.x : ctx.parsed.y)}` } } },
-      scales: { x: { grid: { color: o.horizontal ? INK.grid : 'transparent' }, ticks: { color: INK.tick, maxRotation: 0, autoSkipPadding: 12, callback: o.horizontal ? (v => fmt.k(v)) : undefined }, border: { color: INK.grid }, beginAtZero: true },
-        y: { grid: { color: o.horizontal ? 'transparent' : INK.grid }, ticks: { color: INK.tick, callback: o.horizontal ? undefined : (v => fmt.k(v)) }, border: { display: false }, beginAtZero: true } } },
+      scales: { x: { grid: { color: o.horizontal ? INK.grid : 'transparent' }, ticks: Object.assign({ color: INK.tick, maxRotation: 0, autoSkipPadding: 12 }, o.horizontal ? { callback: v => (o.tick || fmt.k)(v) } : {}), border: { color: INK.grid }, beginAtZero: true },
+        y: { grid: { color: o.horizontal ? 'transparent' : INK.grid }, ticks: Object.assign({ color: INK.tick }, o.horizontal ? {} : { callback: v => (o.tick || fmt.k)(v) }), border: { display: false }, beginAtZero: true } } },
   });
   App.charts.push(c);
   return c;

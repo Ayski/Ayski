@@ -75,6 +75,8 @@ App.views.production = async function (main) {
   paintTests(); App.every(4000, paintTests);
 };
 
+const hours = v => [...new Set(v.split(/[^0-9]+/).filter(Boolean).map(Number).filter(x => x >= 0 && x < 24))].sort((a, b) => a - b);
+
 function settingsForm(meta) {
   const S = meta.settings, rec = meta.recommend;
   const saveBtn = h('button', { class: 'btn primary', disabled: true }, 'Enregistrer les réglages');
@@ -103,6 +105,8 @@ function settingsForm(meta) {
       F.toggle('Mode test', S.test_mode, v => d.set('test_mode', v), { help: 'Les clips restent sur le PC, aucun envoi sur TikTok.' }),
       F.toggle('En mode test, envoyer vers les comptes de test', S.test_upload, v => d.set('test_upload', v), { help: 'Seuls les comptes TikTok marqués « compte de test » reçoivent des clips.' }),
       F.number('Note minimale pour publier aussi dans l\'autre langue', S.cross_lang_min_rating, v => d.set('cross_lang_min_rating', v), { min: 1, max: 10, help: 'Concerne les comptes qui acceptent les clips traduits.' }),
+      F.text('Meilleurs horaires de publication — FR', S.best_hours.fr.join(', '), v => d.set('best_hours.fr', hours(v)), { help: 'Heures séparées par des virgules (ex. 12, 18, 20). Utilisées par les comptes réglés sur « meilleurs horaires ».' }),
+      F.text('Meilleurs horaires de publication — EN', S.best_hours.en.join(', '), v => d.set('best_hours.en', hours(v))),
       F.toggle('Ajustement automatique d\'après les stats TikTok', S.auto_adjust, v => d.set('auto_adjust', v), { help: 'Applique tout seul les recommandations (durées, horaires, catégories).' }))),
     sec('Durée des clips', null, false, grid(
       F.number('Durée minimale (s)', S.min_duration, v => d.set('min_duration', v), { min: 3, max: 119 }),

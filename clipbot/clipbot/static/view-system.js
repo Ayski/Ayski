@@ -33,8 +33,8 @@ App.views.systeme = async function (main) {
         F.number('Plafond par jour ($)', S.ai_budget_day, v => budget.set('ai_budget_day', v), { min: 0, step: 0.5 }), F.number('Plafond par mois ($)', S.ai_budget_month, v => budget.set('ai_budget_month', v), { min: 0, step: 1 }),
         F.number('Prix entrée ($ / million de tokens)', S.ai_price_in, v => budget.set('ai_price_in', v), { min: 0, step: 0.1, help: 'Utilisé seulement pour un modèle inconnu du bot.' }), F.number('Prix sortie ($ / million de tokens)', S.ai_price_out, v => budget.set('ai_price_out', v), { min: 0, step: 0.1 })),
       h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: e => act(e.currentTarget, async () => { const ch = budget.changes(); if (!Object.keys(ch).length) return; const r = await PUT('/api/settings', ch); App.meta.settings = r.settings; budget.commit(); }, 'Plafonds enregistrés') }, 'Enregistrer'),
-        h('span', { class: 'muted small grow' }, 'Quand un plafond est atteint, l\'IA se met en pause toute seule.'))),
-    chartCard('Dépense par jour (30 derniers jours)', 'bar', last30.map(x => x[0]), last30.map(x => x[1]), { label: 'Dépense', fmt: fmt.usd, emptyText: 'Aucun appel à l\'IA sur les 30 derniers jours.' }));
+        h('span', { class: 'muted small grow', style: { minWidth: '180px' } }, 'Quand un plafond est atteint, l\'IA se met en pause toute seule.'))),
+    chartCard('Dépense par jour (30 derniers jours)', 'bar', last30.map(x => x[0]), last30.map(x => x[1]), { label: 'Dépense', fmt: fmt.usd, tick: v => v.toFixed(2).replace('.', ',') + ' $', emptyText: 'Aucun appel à l\'IA sur les 30 derniers jours.' }));
 
   // --- PC ---
   const i = sys.info, rec = sys.recommend;
@@ -66,7 +66,7 @@ App.views.systeme = async function (main) {
 
   // --- clés API ---
   const KEY_LABEL = { TWITCH_CLIENT_ID: 'Twitch — Client ID', TWITCH_CLIENT_SECRET: 'Twitch — Client Secret', ANTHROPIC_API_KEY: 'Anthropic — Clé API', TIKTOK_CLIENT_KEY: 'TikTok — Client key', TIKTOK_CLIENT_SECRET: 'TikTok — Client secret' };
-  const redirect = sys.urls.local.replace(/\/$/, '') + '/api/tiktok/callback';
+  const redirect = sys.urls.local.replace(/\/$/, '') + '/callback/';
   const GUIDES = {
     twitch: ['Comment obtenir les clés Twitch (gratuit, 3 minutes)', [
       ['Va sur ', h('b', null, 'dev.twitch.tv/console'), ' et connecte-toi avec ton compte Twitch (la double authentification doit être activée sur ton compte).'],

@@ -146,7 +146,7 @@ class Engine:
         self._lock = threading.RLock()
         self._started = False
         self._stop = threading.Event()
-        self.modules = {k: {"state": "arrêt", "detail": ""} for k in ("surveillance", "détection", "ia", "montage", "upload")}
+        self.modules = {k: {"state": "attente", "detail": "démarrage…"} for k in ("surveillance", "détection", "ia", "montage", "upload")}
         self.busy = {"transcription": 0, "ia": 0, "montage": 0, "upload": 0}
         self._last_poll = 0.0
         self._poll_now = threading.Event()
@@ -612,7 +612,7 @@ class Engine:
             alert("tiktok_quota", f"Quota TikTok atteint sur {acc['name']} : les clips attendent en file ({e.code})", 3600)
         except tiktok.AuthError as e:
             db.clip_update(c["id"], status=back, next_try_at=time.time() + 1800, error=str(e)[:300])
-            alert("upload_failed", f"Compte {acc['name']} à reconnecter : {e}", 3600)
+            alert("upload_failed", f"Compte {acc['name']} : {e}", 3600)
             self._acc_cooldown[acc["id"]] = time.time() + 1800
         except Exception as e:
             n = (c["retries"] or 0) + 1

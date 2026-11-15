@@ -140,8 +140,13 @@ def _call(acc_id: int, method: str, path: str, *, params=None, body=None) -> dic
     if r.status_code == 429 or code in ("rate_limit_exceeded", "spam_risk_too_many_posts", "spam_risk_too_many_pending_share",
                                          "reached_active_user_cap"):
         raise QuotaError(msg, code, 3600 if code.startswith("spam_risk") else 120)
+    if code == "unaudited_client_can_only_post_to_private_accounts":
+        raise AuthError("TikTok refuse : tant que ton app n'est pas auditée, le compte TikTok doit être en « compte privé » "
+                        "(appli TikTok → Paramètres → Confidentialité → Compte privé).", code)
+    if code == "spam_risk_user_banned_from_posting":
+        raise QuotaError("TikTok a temporairement bloqué les publications de ce compte.", code, 6 * 3600)
     if r.status_code == 401 or code in ("access_token_invalid", "scope_not_authorized", "token_not_authorized_for_specified_publish_id"):
-        raise AuthError(msg, code)
+        raise AuthError(f"connexion TikTok à refaire ({code})", code)
     raise TikTokError(msg, code)
 
 

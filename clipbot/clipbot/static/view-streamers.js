@@ -35,8 +35,8 @@ async function streamersTab(body) {
         F.select('Statut', s.status, ST_STATUS, v => save({ status: v }).then(() => { s.status = v; })),
         F.select('Langue', s.lang, Object.entries(LANGS), v => save({ lang: v })),
         F.select('Compte TikTok', s.account_id ?? '', accOpts, v => save({ account_id: v ? Number(v) : null })),
-        F.number('Max clips / jour', s.max_clips_day, v => save({ max_clips_day: v }), { min: 0 }),
-        F.number('Seuil d\'intérêt (note IA)', s.interest_threshold, v => save({ interest_threshold: v }), { min: 1, max: 10, nullable: true, placeholder: `global (${App.meta.settings.ai_threshold})` }),
+        F.number('Max clips / jour', s.max_clips_day, v => save({ max_clips_day: v }), { min: 0, lazy: true }),
+        F.number('Seuil d\'intérêt (note IA)', s.interest_threshold, v => save({ interest_threshold: v }), { min: 1, max: 10, nullable: true, lazy: true, placeholder: `global (${App.meta.settings.ai_threshold})` }),
         h('div', { class: 'field', style: { justifyContent: 'flex-end' } }, F.toggle('Séries', s.series_enabled, v => save({ series_enabled: v ? 1 : 0 })))),
       h('div', { class: 'row' },
         h('a', { class: 'btn sm', href: '#/streamers/' + encodeURIComponent(s.login) }, 'Ouvrir la fiche'),
@@ -71,7 +71,7 @@ async function suggestionsTab(body) {
   async function paint() {
     let r; try { r = await GET('/api/suggestions' + (lang ? '?lang=' + lang : '')); } catch (e) { return clear(list, empty('Suggestions indisponibles', e.message)); }
     info.textContent = r.updated_at ? 'Dernier calcul ' + fmt.ago(r.updated_at) : '';
-    if (!r.twitch_ready) return clear(list, empty('Clés Twitch manquantes', 'Ajoute tes clés Twitch pour recevoir des suggestions.', h('a', { class: 'btn primary', href: '#/systeme' }, 'Ouvrir Système → Clés API')));
+    if (!r.twitch_ready && !r.suggestions.length) return clear(list, empty('Clés Twitch manquantes', 'Ajoute tes clés Twitch pour recevoir des suggestions.', h('a', { class: 'btn primary', href: '#/systeme' }, 'Ouvrir Système → Clés API')));
     if (!r.suggestions.length) return clear(list, empty('Pas encore de suggestion', 'Le bot a besoin de quelques relevés Twitch (laisse-le tourner un moment), puis clique sur « Recalculer ».'));
     clear(list, h('div', { class: 'grid gauto' }, r.suggestions.map(s => { const d = s.details || {}; return h('div', { class: 'card stack', style: { gap: '12px' } },
       h('div', { class: 'row nowrap' }, avatar(s.avatar, s.display_name || s.login),
