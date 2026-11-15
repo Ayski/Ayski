@@ -73,7 +73,7 @@ ACCOUNT_DEFAULTS: dict = {
                   "position": "middle", "size": 92, "uppercase": True},
     "title_style": {"font": "Poppins ExtraBold", "color": "#FFFFFF", "box": "#E11D48", "position": "top", "size": 70},
     "series": True, "cross_lang": False, "privacy": "SELF_ONLY",
-    "min_gap_minutes": 20, "use_best_hours": False,
+    "min_gap_minutes": 20, "series_episode_gap_minutes": 1, "use_best_hours": False,
 }
 
 CATEGORIES = ["action", "drole", "rp", "fail", "reaction"]

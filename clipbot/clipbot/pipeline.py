@@ -605,7 +605,8 @@ class Engine:
             return None
         done_today = db.val("SELECT COUNT(*) FROM clips WHERE account_id=? AND uploaded_at>=?", [acc["id"], day_start()], 0)
         last = db.val("SELECT MAX(uploaded_at) FROM clips WHERE account_id=?", [acc["id"]], 0)
-        if done_today >= aset["clips_per_day"] or now - last < aset["min_gap_minutes"] * 60:
+        gap_ok = now - last >= aset["min_gap_minutes"] * 60
+        if done_today >= aset["clips_per_day"] or now - last < min(aset["min_gap_minutes"], aset["series_episode_gap_minutes"]) * 60:
             return None
         if aset["use_best_hours"] and time.localtime().tm_hour not in cfg["best_hours"].get(acc["lang"], list(range(24))):
             return None
@@ -618,8 +619,11 @@ class Engine:
                       "AND status IN ('uploading','uploaded_private','published')", [acc["id"]]):
             if db.val("SELECT COUNT(*) FROM clips WHERE account_id=? AND series_id=? AND status IN "
                       "('detected','transcribing','analyzing','editing','queued','uploading')", [acc["id"], r["series_id"]], 0):
-                nxt = [c for c in cands if c["series_id"] == r["series_id"]]
-                return min(nxt, key=lambda c: (c["episode"] or 0, c["id"])) if nxt else None
+                nxt = [c for c in cands if c["series_id"] == r["series_id"]]     # épisodes suivants : écart court propre aux séries
+                ok = now - last >= aset["series_episode_gap_minutes"] * 60
+                return min(nxt, key=lambda c: (c["episode"] or 0, c["id"])) if nxt and ok else None
+        if not gap_ok:
+            return None
         ready_series = [c for c in cands if c["series_id"]]
         if ready_series:                # une série complète attend : elle passe avant les clips isolés
             return min(ready_series, key=lambda c: (c["series_id"], c["episode"] or 0, c["id"]))

@@ -80,6 +80,7 @@ function accountCard(a, repaint) {
           F.select('Visibilité à l\'upload', S.privacy, PRIVACY, set('privacy'), { help: 'Privé : tu passes toi-même les vidéos en public dans TikTok (compte privé obligatoire tant que l\'app n\'est pas validée). Brouillon : la vidéo arrive dans les notifications de l\'appli TikTok, tu colles la description et tu publies ; pensé pour un compte public.' }),
           F.number('Clips par jour (maximum)', S.clips_per_day, set('clips_per_day'), { min: 0, max: 50 }),
           F.number('Écart minimal entre deux uploads (minutes)', S.min_gap_minutes, set('min_gap_minutes'), { min: 0 }),
+          F.number('Écart entre deux épisodes d\'une même série (minutes)', S.series_episode_gap_minutes, set('series_episode_gap_minutes'), { min: 0, help: 'Une fois l\'épisode 1 parti, les suivants s\'enchaînent avec cet écart.' }),
           F.number('Durée minimale (s)', S.min_duration, set('min_duration'), { min: 3 }),
           F.number('Durée maximale (s)', S.max_duration, set('max_duration'), { min: 5 }),
           F.toggle('Séries « L\'aventure de… »', S.series, set('series')),
