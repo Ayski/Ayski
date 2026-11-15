@@ -14,7 +14,7 @@ from .logbus import log, warn
 
 AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
 API = "https://open.tiktokapis.com"
-SCOPES = "user.info.basic,user.info.profile,user.info.stats,video.list,video.publish,video.upload"
+SCOPES = "user.info.basic,user.info.stats,video.list,video.publish,video.upload"
 _client = httpx.Client(timeout=60)
 _pending: dict[str, dict] = {}     # state -> {verifier, redirect, ts}
 

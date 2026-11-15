@@ -84,7 +84,7 @@ App.views.systeme = async function (main) {
       ['Remplis le nom, la description et l\'icône. Plateforme : ', h('b', null, 'Desktop'), '.'],
       ['Ajoute les produits ', h('b', null, 'Login Kit'), ' et ', h('b', null, 'Content Posting API'), ' (active ', h('b', null, 'Direct Post'), ').'],
       ['Dans Login Kit, ajoute cette ', h('b', null, 'Redirect URI'), ' exactement : ', h('code', null, redirect)],
-      ['Dans Scopes, ajoute : ', h('code', null, 'user.info.basic'), ' ', h('code', null, 'user.info.profile'), ' ', h('code', null, 'user.info.stats'), ' ', h('code', null, 'video.list'), ' ', h('code', null, 'video.publish'), ' ', h('code', null, 'video.upload')],
+      ['Dans Scopes, ajoute : ', h('code', null, 'user.info.basic'), ' ', h('code', null, 'user.info.stats'), ' ', h('code', null, 'video.list'), ' ', h('code', null, 'video.publish'), ' ', h('code', null, 'video.upload')],
       ['Dans l\'onglet ', h('b', null, 'Sandbox'), ', ajoute ton compte TikTok comme ', h('b', null, 'target user'), ' : cela permet de tester sans attendre la validation de TikTok.'],
       ['Copie le ', h('b', null, 'Client key'), ' et le ', h('b', null, 'Client secret'), ' ci-dessus, puis va dans Comptes → « Connecter un compte TikTok ».'],
       ['À savoir : tant que TikTok n\'a pas audité l\'application, les vidéos sont publiées ', h('b', null, 'uniquement en privé'), '. C\'est exactement le fonctionnement voulu ici : tu passes toi-même les clips en public.']]],
