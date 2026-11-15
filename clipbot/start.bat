@@ -1,6 +1,12 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
+rem --- Dossier des clips et des telechargements : E:\GTA 6 clip (si le disque E existe) ---
+if not defined CLIPBOT_DATA if exist E:\ (
+  if not exist "E:\GTA 6 clip" mkdir "E:\GTA 6 clip"
+  set "CLIPBOT_DATA=E:\GTA 6 clip"
+  set "PIP_CACHE_DIR=E:\GTA 6 clip\telechargements"
+)
 if not exist ".venv\Scripts\python.exe" (
   echo Premier lancement : installation...
   call install.bat

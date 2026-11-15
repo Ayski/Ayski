@@ -2,6 +2,12 @@
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
+rem --- Dossier des clips et des telechargements : E:\GTA 6 clip (si le disque E existe) ---
+if not defined CLIPBOT_DATA if exist E:\ (
+  if not exist "E:\GTA 6 clip" mkdir "E:\GTA 6 clip"
+  set "CLIPBOT_DATA=E:\GTA 6 clip"
+  set "PIP_CACHE_DIR=E:\GTA 6 clip\telechargements"
+)
 echo.
 echo  ===== Installation de ClipBot =====
 echo.
@@ -55,5 +61,6 @@ echo [4/4] Analyse de ton PC :
 
 echo.
 echo  Installation terminee. Double-clique sur start.bat pour lancer le bot.
+if defined CLIPBOT_DATA echo  Tes clips et tous les telechargements du bot iront dans : %CLIPBOT_DATA%
 echo.
 pause

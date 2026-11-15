@@ -66,6 +66,9 @@ Sans clé TikTok, les clips restent sur ton PC.
 
 ## 4. Mode test GTA V, puis GTA VI
 
+- **Où sont rangés les fichiers** : si ton PC a un disque **E:**, le bot crée tout seul le dossier **`E:\GTA 6 clip`** et y met
+  tout ce qu'il télécharge ou produit (clips dans `E:\GTA 6 clip\clips\<streamer>\`, modèle de transcription, vidéos de test,
+  fichiers temporaires). Sans disque E:, tout va dans `clipbot/data/`.
 - Par défaut : **mode test**, jeu « Grand Theft Auto V », **aucun upload**. Les clips sont rangés dans
   `clipbot/data/clips/<streamer>/` avec leur description en `.txt`, et visibles dans l'onglet **Clips**.
 - Note tes clips avec 👍 / 👎 : le bot ajuste ses réglages (onglet **Clips → Calibrage**).
