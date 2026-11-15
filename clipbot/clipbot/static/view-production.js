@@ -137,8 +137,11 @@ function settingsForm(meta) {
       F.select('Ouverture du clip', S.opening_mode, [['auto', 'Automatique'], ['hook_text', 'Texte teaser (hook)'], ['cold_open', 'Le passage le plus fort d\'abord'], ['none', 'Aucune']], v => d.set('opening_mode', v)),
       F.toggle('Jump cuts', S.jump_cuts, v => d.set('jump_cuts', v), { help: 'Supprime les silences et temps morts.' }),
       F.toggle('Zooms sur les pics', S.zooms, v => d.set('zooms', v)))),
-    sec('Séries « L\'aventure de… »', null, false, grid(
+    sec('Séries (histoires en plusieurs épisodes)', 'braquage, poursuite, mission…', false, grid(
       F.toggle('Séries activées', S.series_enabled, v => d.set('series_enabled', v)),
+      F.toggle('Séries uniquement', S.series_only, v => d.set('series_only', v), { help: 'Le bot ne garde que les clips qui font partie d\'une histoire (début d\'un braquage, puis la suite). Les clips isolés sont écartés. Nécessite la clé Anthropic.' }),
+      F.number('Note minimale pour garder quand même un clip isolé', S.solo_min_rating, v => d.set('solo_min_rating', v), { min: 1, max: 11, help: '9 = seulement les moments exceptionnels. 11 = jamais de clip isolé.' }),
+      F.toggle('Suivre de près une histoire en cours', S.series_boost, v => d.set('series_boost', v), { help: 'Dès qu\'une histoire démarre chez un streamer, la détection devient plus sensible pour lui afin de capter les épisodes suivants.' }),
       F.number('Épisodes minimum', S.series_min, v => d.set('series_min', v), { min: 2, max: 6 }),
       F.number('Épisodes maximum', S.series_max, v => d.set('series_max', v), { min: 2, max: 12 }),
       F.number('Série fermée après (minutes sans nouvel épisode)', S.series_gap_minutes, v => d.set('series_gap_minutes', v), { min: 5 }))),

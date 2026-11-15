@@ -31,12 +31,14 @@ def assign(clip: dict, streamer_row: dict, decision: dict | None, summary: str =
     if sid in opened and opened[sid]["episodes"] < cfg["series_max"]:
         ep = opened[sid]["episodes"] + 1
         db.update("series", "id", sid, {"updated_at": time.time(), "summary": summary or opened[sid].get("summary")})
-        if ep >= cfg["series_max"]:
+        if ep >= cfg["series_max"] or (decision.get("story_phase") == "fin" and ep >= max(2, cfg["series_min"])):
             db.update("series", "id", sid, {"status": "closed"})
         return sid, ep
     n = db.val("SELECT COUNT(*) FROM series WHERE streamer=?", [clip["streamer"]], 0) + 1
-    sid = db.insert("series", {"streamer": clip["streamer"], "title": series_title(streamer_row.get("display_name") or clip["streamer"], clip["lang"]),
-                               "hashtag": f"aventure{slug(clip['streamer'])}{n if n > 1 else ''}", "lang": clip["lang"],
+    story = " ".join((decision.get("story_title") or "").replace("#", "").split()[:6])[:48]
+    title = story or series_title(streamer_row.get("display_name") or clip["streamer"], clip["lang"])
+    tag = f"{slug(story)[:22]}{slug(clip['streamer'])}" if story else f"aventure{slug(clip['streamer'])}{n if n > 1 else ''}"
+    sid = db.insert("series", {"streamer": clip["streamer"], "title": title, "hashtag": tag, "lang": clip["lang"],
                                "status": "open", "summary": summary, "created_at": time.time(), "updated_at": time.time()})
     return sid, 1
 
@@ -50,8 +52,10 @@ def texts_for(clip: dict) -> dict:
         return {}
     lang = clip.get("target_lang") or clip["lang"]
     total = db.val("SELECT MAX(episode) FROM clips WHERE series_id=? AND status NOT IN ('rejected','deleted','failed')", [s["id"]], 1)
-    disp = s["title"].replace("L'aventure de ", "").replace("'s adventure", "")
-    title = series_title(disp, lang)
+    if s["title"].startswith("L'aventure de ") or s["title"].endswith("'s adventure"):
+        title = series_title(s["title"].replace("L'aventure de ", "").replace("'s adventure", ""), lang)
+    else:
+        title = s["title"]                  # nom de l'histoire choisi par l'IA (« Le braquage de la banque »)
     label = episode_label(lang, clip["episode"] or 1)
     has_next = (clip["episode"] or 1) < total
     teaser = ""
@@ -78,7 +82,12 @@ def maintain() -> list[int]:
             db.update("series", "id", s["id"], {"status": "closed"})
             eps = db.q("SELECT id,status FROM clips WHERE series_id=? AND status NOT IN ('rejected','deleted','failed')", [s["id"]])
             if len({e["id"] for e in eps}) < max(2, cfg["series_min"]) and all(e["status"] not in DONE for e in eps):
-                for e in eps:           # pas assez d'épisodes : clips isolés
+                for e in eps:           # pas assez d'épisodes : clips isolés (jetés en mode « séries uniquement »)
+                    rating = db.val("SELECT rating FROM clips WHERE id=?", [e["id"]], 0) or 0
+                    if cfg["series_only"] and rating < cfg["solo_min_rating"]:
+                        db.clip_update(e["id"], series_id=None, episode=None, status="rejected",
+                                       error="histoire restée sans suite (mode séries uniquement)")
+                        continue
                     db.clip_update(e["id"], series_id=None, episode=None)
                     redo.append(e["id"])
                 db.update("series", "id", s["id"], {"status": "dissolved"})

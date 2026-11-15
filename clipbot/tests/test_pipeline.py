@@ -24,6 +24,7 @@ class FakeAI:
         self.calls = []
         self.rating = 9
         self.series = True
+        self.story = ""
 
     def __call__(self, **kw):
         self.calls.append(kw)
@@ -34,7 +35,8 @@ class FakeAI:
             title="No way he did that" if need_tr else "Il finit dans l'eau", hook="Wait…" if need_tr else "Attends la fin",
             caption="He never saw it coming" if need_tr else "Il ne l'a pas vu venir", hashtags=["poursuite", "police"],
             memory=ai.MemoryUpdate(character="Braqueur", goals="Semer la police", new_events=["Chute dans l'eau"], summary="Il fuit la police."),
-            series=ai.SeriesDecision(part_of_series=self.series, existing_series_id=sid, recap="la police le traquait" if sid else ""),
+            series=ai.SeriesDecision(part_of_series=self.series, existing_series_id=sid, story_title=self.story,
+                                     story_phase="suite" if sid else "debut", recap="la police le traquait" if sid else ""),
             translated_lines=[ai.SubLine(i=0, text="no way that's impossible"), ai.SubLine(i=1, text="look at that he's crazy")] if need_tr else [])
 
 
@@ -194,3 +196,26 @@ def test_resume_after_crash(eng, raw_video):
     db.clip_update(ids[2], status="editing")
     eng._resume()
     assert eng.q_tr.qsize() == 1 and eng.q_ai.qsize() == 1 and eng.q_edit.qsize() == 1
+
+
+def test_series_only_drops_isolated_and_names_story(eng, raw_video):
+    eng.fake.series, eng.fake.rating = False, 7                         # clip isolé correct mais pas exceptionnel
+    cid = new_clip(raw_video)
+    eng.enqueue("tr", cid)
+    assert drain(eng, cid)["status"] == "ready"                         # par défaut : les clips isolés sont gardés
+    settings.put({"series_only": True})
+    cid = new_clip(raw_video, 2)
+    eng.enqueue("tr", cid)
+    c = drain(eng, cid)
+    assert c["status"] == "rejected" and "isolé" in c["error"]
+    eng.fake.series, eng.fake.story = True, "Le braquage de la banque"  # début d'une histoire : gardé, série nommée
+    cid = new_clip(raw_video, 1)
+    eng.enqueue("tr", cid)
+    c = drain(eng, cid)
+    s = db.one("SELECT * FROM series WHERE id=?", [c["series_id"]])
+    assert c["episode"] == 1 and s["title"] == "Le braquage de la banque"
+    assert series.texts_for(c)["video_title"].startswith("Le braquage de la banque — Ép. 1")
+    settings.put({"series_gap_minutes": 0})                             # aucune suite : l'histoire avortée est écartée
+    db.ex("UPDATE clips SET created_at=created_at-10")
+    assert series.maintain() == []
+    assert db.val("SELECT status FROM clips WHERE id=?", [cid]) == "rejected"

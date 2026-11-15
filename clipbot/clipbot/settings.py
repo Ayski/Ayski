@@ -50,6 +50,9 @@ DEFAULTS: dict = {
     "encoder": "auto",
     "jump_cuts": True, "zooms": True, "opening_mode": "auto",   # auto | hook_text | cold_open | none
     "series_enabled": True, "series_min": 2, "series_max": 6, "series_gap_minutes": 45,
+    "series_only": False,              # option : ne garder que les clips qui font partie d'une histoire en plusieurs épisodes
+    "solo_min_rating": 9,              # … sauf moment exceptionnel isolé noté au moins ceci (11 = jamais)
+    "series_boost": True,              # histoire en cours : détection plus sensible pour capter les épisodes suivants
     "cross_lang_min_rating": 8,
     "auto_adjust": False,
     "calibration_lr": 0.08,

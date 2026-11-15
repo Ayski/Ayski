@@ -26,6 +26,14 @@ def _rm(p) -> None:
         pass
 
 
+def story_cfg(cfg: dict, login: str) -> dict:
+    """Histoire en cours chez ce streamer : seuil de détection abaissé pour ne pas rater les épisodes suivants."""
+    if cfg.get("series_boost") and cfg.get("series_enabled") and db.val(
+            "SELECT COUNT(*) FROM series WHERE streamer=? AND status='open'", [login], 0):
+        return {**cfg, "detect_threshold": round(cfg["detect_threshold"] * 0.75, 3)}
+    return cfg
+
+
 def day_start() -> float:
     lt = time.localtime()
     return time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
@@ -107,7 +115,7 @@ class StreamWorker:
         if self.user_id and time.time() - self._last_clip_poll > 75 and twitch.configured():
             self._last_clip_poll = time.time()
             self._poll_viewer_clips(cfg)
-        for m in self.det.step(time.time(), cfg):
+        for m in self.det.step(time.time(), story_cfg(cfg, self.login)):
             self.engine.on_moment(self, m, cfg)
         if time.time() - self._last_save > 300:
             self._last_save = time.time()
@@ -398,7 +406,7 @@ class Engine:
         if not c or c["status"] not in ("detected", "transcribing"):
             return
         db.clip_update(clip_id, status="transcribing")
-        cfg = settings.all()
+        cfg = story_cfg(settings.all(), c["streamer"])
         tr = transcribe.transcribe(c["raw_path"], c["lang"])
         inside = " ".join(w["w"] for w in tr["words"] if c["raw_in"] - 1 <= w["s"] <= c["raw_out"] + 1)
         kws = cfg["keywords"].get(tr.get("language") or c["lang"], cfg["keywords"].get(c["lang"], []))
@@ -446,6 +454,9 @@ class Engine:
         else:
             a = ai.fallback_analysis(srow.get("display_name") or c["streamer"], tr, c["score"] or 0, target)
         threshold = srow.get("interest_threshold") or cfg["ai_threshold"]
+        opened_ids = {s["id"] for s in series.open_series(c["streamer"])}
+        if res is not None and cfg["series_boost"] and a["series"]["part_of_series"] and a["series"]["existing_series_id"] in opened_ids:
+            threshold = max(1, threshold - 2)       # suite d'une histoire en cours : on est moins exigeant sur la note
         upd = {"ai": a, "rating": a["rating"], "category": a["category"], "title": a["title"], "hook": a["hook"],
                "account_id": acc["id"] if acc else None, "target_lang": target}
         if not a.get("no_ai") and a["rating"] < threshold and not is_child:
@@ -464,6 +475,11 @@ class Engine:
             db.update("streamers", "login", c["streamer"], {"memory": mem})
             if not sid and aset["series"]:
                 sid, ep = series.assign(c, srow, a["series"], mu["summary"])
+            if (not sid and cfg["series_only"] and cfg["series_enabled"] and aset["series"] and srow.get("series_enabled", 1)
+                    and a["rating"] < cfg["solo_min_rating"]):
+                db.clip_update(clip_id, status="rejected", error="clip isolé, hors histoire (mode séries uniquement)", **upd)
+                log("ia", f"{c['streamer']}: clip isolé écarté ({a['rating']}/10) — {a['description'][:80]}")
+                return
         upd.update(series_id=sid, episode=ep)
         db.clip_update(clip_id, **upd)
         c = db.one("SELECT * FROM clips WHERE id=?", [clip_id])

@@ -28,6 +28,8 @@ class MemoryUpdate(BaseModel):
 class SeriesDecision(BaseModel):
     part_of_series: bool
     existing_series_id: Optional[int]   # id d'une série ouverte à continuer, sinon null
+    story_title: str                    # nom court de l'histoire (≤ 5 mots, ex. « Le braquage de la banque »), "" si clip isolé
+    story_phase: Literal["debut", "suite", "fin", "aucune"]   # où en est l'histoire dans ce clip
     recap: str                          # « Précédemment : … » ultra-court (≤ 8 mots) si suite, sinon ""
 
 
@@ -116,9 +118,16 @@ Ta mission, en restant strictement fidèle à ce qui se passe réellement :
 - caption : une phrase d'accroche pour la description TikTok, en {lang} (sans hashtag, sans crédit).
 - hashtags : 1 à 3 hashtags précis liés à la scène (sans le #, minuscules, sans espaces). Les hashtags larges sont ajoutés automatiquement.
 - memory : mets à jour la mémoire du streamer (personnage joué, objectifs, événements marquants, résumé de son aventure).
-- series : décide si ce clip est isolé ou fait partie d'une SÉRIE narrative (même fil d'histoire qu'un clip précédent ou
-  début évident d'une histoire qui continue : poursuite, mission, braquage, intrigue RP…). Pour continuer une série ouverte,
-  donne son id. « recap » = rappel ultra-court de l'épisode précédent (≤ 8 mots, en {lang}) seulement si le clip est une suite.
+- series : décide si ce clip est isolé ou fait partie d'une SÉRIE narrative, c'est-à-dire une histoire qui se déroule sur
+  plusieurs minutes et donnera plusieurs épisodes : braquage (préparation, entrée, fuite), poursuite, mission, prise d'otage,
+  procès, intrigue RP… part_of_series = true seulement si le clip continue une série ouverte, ou s'il montre le DÉBUT évident
+  d'une telle histoire (le plan se met en place, l'action démarre : « on y va », arrivée sur les lieux, première alerte).
+  Un gag, un fail ou une réaction sans suite prévisible est un clip isolé (false).
+  Pour continuer une série ouverte, donne son id (même histoire uniquement, pas juste le même streamer).
+  « story_title » = nom court de l'histoire en {lang}, 5 mots maximum, sans le nom du streamer (ex. « Le braquage de la banque ») ;
+  garde le même nom d'un épisode à l'autre ; "" si clip isolé.
+  « story_phase » = debut, suite, ou fin (l'histoire se conclut dans ce clip : fuite réussie, arrestation, mort…) ; aucune si isolé.
+  « recap » = rappel ultra-court de l'épisode précédent (≤ 8 mots, en {lang}) seulement si le clip est une suite.{series_only}
 - translated_lines : {translate}
 
 Réponds uniquement avec l'objet structuré demandé."""
@@ -160,6 +169,9 @@ Séries ouvertes de ce streamer :
 Titres que le propriétaire a aimés : {notes.get('liked_titles', [])[-5:]}
 Titres qu'il a trouvés nuls (à éviter) : {notes.get('disliked_titles', [])[-5:]}"""})
     system = SYSTEM.format(game=cfg["game"], lang=LANG_NAME.get(target_lang, target_lang),
+                           series_only=("\n  IMPORTANT : la chaîne ne publie QUE des séries. Les clips isolés sont jetés : cherche "
+                                        "activement si une histoire commence ou continue, sans jamais en inventer une."
+                                        if cfg.get("series_only") and cfg.get("series_enabled") else ""),
                            translate=(f"traduis chaque réplique numérotée en {LANG_NAME.get(target_lang, target_lang)} "
                                       "(naturel, oral, court), une entrée par réplique avec son numéro." if need_tr
                                       else "renvoie une liste vide."))
