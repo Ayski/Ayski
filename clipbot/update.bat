@@ -30,7 +30,10 @@ if exist ".venv\Scripts\python.exe" ".venv\Scripts\python.exe" -m pip install -q
 rmdir /s /q "%DIR%" 2>nul
 del "%ZIP%" 2>nul
 echo.
-echo  Mise a jour terminee. Lance start.bat, puis appuie sur Ctrl+F5 dans le navigateur.
+echo  Mise a jour terminee. Version installee :
+type VERSION
+echo.
+echo  Lance start.bat, puis appuie sur Ctrl+F5 dans le navigateur.
 echo.
 pause
 exit /b 0
@@ -38,6 +41,7 @@ exit /b 0
 :fail
 echo.
 echo  [!] La mise a jour a echoue. Verifie ta connexion internet et que ClipBot est bien ferme, puis relance update.bat.
+echo      Si ca continue, fais une capture de cette fenetre.
 echo.
 pause
 exit /b 1

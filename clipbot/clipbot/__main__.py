@@ -21,7 +21,11 @@ def main() -> None:
         import json
         print(json.dumps({"systeme": sysinfo.static_info(), "conseils": sysinfo.recommend()}, indent=2, ensure_ascii=False))
         return
-    print(f"\n  ClipBot démarre…\n  Sur ce PC      : http://localhost:{args.port}\n"
+    try:
+        version = (paths.ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        version = "inconnue"
+    print(f"\n  ClipBot démarre…  (version {version})\n  Sur ce PC      : http://localhost:{args.port}\n"
           f"  Sur téléphone  : http://{sysinfo.lan_ip()}:{args.port}  (même Wi-Fi)\n  Arrêt : Ctrl+C\n")
     if not args.no_browser:
         threading.Timer(2.0, lambda: webbrowser.open(f"http://localhost:{args.port}")).start()

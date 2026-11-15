@@ -72,6 +72,8 @@ async def guard(request: Request, call_next):
     resp.headers["Referrer-Policy"] = "same-origin"
     if p.startswith("/api/"):
         resp.headers["Cache-Control"] = "no-store"
+    elif p.startswith("/static/"):
+        resp.headers["Cache-Control"] = "no-cache"      # le navigateur revérifie toujours : une mise à jour s'affiche tout de suite
     return resp
 
 
