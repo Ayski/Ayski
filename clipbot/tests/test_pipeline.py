@@ -110,10 +110,10 @@ def test_low_score_rejected_before_ai(eng, raw_video):
 
 
 def test_series_order_cross_lang_and_upload_queue(eng, raw_video, monkeypatch):
-    fr = db.insert("accounts", {"open_id": "fr1", "name": "FR", "lang": "fr", "connected": 1, "is_test": 0, "settings": {"min_gap_minutes": 0},
+    fr = db.insert("accounts", {"open_id": "fr1", "name": "FR", "lang": "fr", "connected": 1, "is_test": 0, "settings": {"min_gap_minutes": 0, "series_episode_gap_minutes": 0},
                                 "access_token": "x", "expires_at": time.time() + 9999})
     en = db.insert("accounts", {"open_id": "en1", "name": "EN", "lang": "en", "connected": 1, "is_test": 1,
-                                "settings": {"cross_lang": True, "min_gap_minutes": 0}, "access_token": "x", "expires_at": time.time() + 9999})
+                                "settings": {"cross_lang": True, "min_gap_minutes": 0, "series_episode_gap_minutes": 0}, "access_token": "x", "expires_at": time.time() + 9999})
     uploads, fail = [], {"quota": True}
 
     def fake_upload(acc_id, path, caption, privacy="SELF_ONLY"):
