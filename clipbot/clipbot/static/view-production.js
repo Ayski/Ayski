@@ -111,7 +111,7 @@ function settingsForm(meta) {
     sec('Durée des clips', null, false, grid(
       F.number('Durée minimale (s)', S.min_duration, v => d.set('min_duration', v), { min: 3, max: 119 }),
       F.number('Durée maximale (s)', S.max_duration, v => d.set('max_duration', v), { min: 4, max: 120 }),
-      F.number('Durée idéale — minimum (s)', S.ideal_min, v => d.set('ideal_min', v), { min: 3 }),
+      F.number('Durée idéale — minimum (s)', S.ideal_min, v => d.set('ideal_min', v), { min: 3, help: 'Durée visée pour chaque clip : un moment bref est allongé (contexte avant, réaction après) jusqu\'à cette durée, et les coupes de silences ne descendent pas en dessous.' }),
       F.number('Durée idéale — maximum (s)', S.ideal_max, v => d.set('ideal_max', v), { min: 4 }),
       F.number('Contexte gardé avant l\'action (s)', S.context_before, v => d.set('context_before', v), { min: 0, max: 15, step: 0.5 }),
       F.number('Décalage du chat (s)', S.chat_lag, v => d.set('chat_lag', v), { min: 0, max: 20, step: 0.5, help: 'Le chat réagit quelques secondes après l\'action.' }))),

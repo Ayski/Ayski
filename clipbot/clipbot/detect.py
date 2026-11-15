@@ -147,6 +147,11 @@ class Detector:
             too_long = sec + 1.5 - clip_start >= cfg["max_duration"]
             if too_long or (sm < t_off and sec - a["last_above"] >= 3) or sec - a["last_above"] >= 6:
                 end = min(a["last_above"] + 2.5, clip_start + cfg["max_duration"])
+                # pic bref : on vise la durée idéale en gardant la réaction qui suit (déjà dans le buffer) puis plus de contexte avant
+                target = min(cfg["max_duration"], max(cfg["min_duration"], cfg.get("ideal_min", 0)))
+                if end - clip_start < target:
+                    end = min(clip_start + target, max(end, sec + 6.0))
+                    clip_start = max(self.last_end, end - target)
                 if end - clip_start < cfg["min_duration"]:
                     end = clip_start + cfg["min_duration"]
                 secs = range(int(a["start"]), int(a["last_above"]) + 1)

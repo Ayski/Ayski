@@ -556,7 +556,7 @@ class Engine:
             hook=c["hook"] or "", credit=f"twitch.tv/{c['streamer']}", recap=st.get("recap", ""), teaser=st.get("teaser", ""),
             sub_style=aset["sub_style"], title_style=aset["title_style"], quality=cfg["export_quality"], encoder=cfg["encoder"],
             jump_cuts=cfg["jump_cuts"], zooms=cfg["zooms"], opening=cfg["opening_mode"],
-            min_duration=max(cfg["min_duration"], aset["min_duration"]), thumb=str(thumb))
+            min_duration=min(max_d, max(cfg["min_duration"], aset["min_duration"], cfg["ideal_min"])), thumb=str(thumb))
         t0 = time.time()
         res = editor.render(job)
         if c["final_path"] and c["final_path"] != str(out):
