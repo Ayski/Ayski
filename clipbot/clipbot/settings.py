@@ -52,6 +52,7 @@ DEFAULTS: dict = {
     "series_enabled": True, "series_min": 2, "series_max": 6, "series_gap_minutes": 45,
     "series_only": False,              # option : ne garder que les clips qui font partie d'une histoire en plusieurs épisodes
     "solo_min_rating": 9,              # … sauf moment exceptionnel isolé noté au moins ceci (11 = jamais)
+    "series_follow_minutes": 4,        # histoire en cours : toutes les N minutes sans clip, l'IA regarde le meilleur passage (0 = désactivé)
     "series_boost": True,              # histoire en cours : détection plus sensible pour capter les épisodes suivants
     "cross_lang_min_rating": 8,
     "auto_adjust": False,
@@ -64,7 +65,7 @@ DEFAULTS: dict = {
 }
 
 ACCOUNT_DEFAULTS: dict = {
-    "clips_per_day": 10, "min_duration": 10, "max_duration": 30,
+    "clips_per_day": 10, "min_duration": 3, "max_duration": 120,   # par défaut, ce sont les durées de Production qui décident
     "categories": ["action", "drole", "rp", "fail", "reaction"],
     "fixed_hashtags": [],
     "sub_style": {"font": "Anton", "color": "#FFFFFF", "highlight": "#FFE600", "outline": "#000000",

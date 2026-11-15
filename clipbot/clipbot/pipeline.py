@@ -73,6 +73,7 @@ class StreamWorker:
         self._seen_clips: set[str] = set()
         self._last_clip_poll = time.time()
         self._last_save = time.time()
+        self._last_follow = time.time()
         self.started = time.time()
         self.moments = 0
         self.thread = threading.Thread(target=self._run, name=f"det-{login}", daemon=True)
@@ -117,9 +118,23 @@ class StreamWorker:
             self._poll_viewer_clips(cfg)
         for m in self.det.step(time.time(), story_cfg(cfg, self.login)):
             self.engine.on_moment(self, m, cfg)
+        every = cfg["series_follow_minutes"] * 60
+        if cfg["series_enabled"] and every > 0 and time.time() - self._last_follow > every:
+            self._last_follow = time.time()
+            self._follow_story(cfg, every)
         if time.time() - self._last_save > 300:
             self._last_save = time.time()
             self._save_stats()
+
+    def _follow_story(self, cfg: dict, every: float) -> None:
+        """Une histoire est ouverte et rien n'a été clippé récemment : on soumet le meilleur passage à l'IA."""
+        if not db.val("SELECT COUNT(*) FROM series WHERE streamer=? AND status='open'", [self.login], 0):
+            return
+        if db.val("SELECT COUNT(*) FROM clips WHERE streamer=? AND created_at>?", [self.login, time.time() - every], 0):
+            return
+        m = self.det.force_follow(cfg)
+        if m:
+            self.engine.on_moment(self, m, cfg)
 
     def _poll_viewer_clips(self, cfg: dict) -> None:
         try:
@@ -397,7 +412,7 @@ class Engine:
                        raw_out=round(m.end - base, 2), peaks=peaks, chat_summary=summary[:6000])
         w.moments += 1
         log("détection", f"{w.login}: moment fort détecté (score {m.score}, {m.end - m.start:.0f} s)"
-            + (" — clip viewer" if m.forced else ""))
+            + (" — suivi d'histoire" if m.signals.get("follow") else " — clip viewer" if m.forced else ""))
         self.enqueue("tr", clip_id)
 
     # ------------------------------------------------------------------ transcription
@@ -415,7 +430,7 @@ class Engine:
         sig["keywords"] = round(ks, 3)
         score = round(detect.combine(sig, cfg["weights"]), 3)
         upd = {"transcript": tr, "signals": sig, "score": score}
-        if score < cfg["detect_threshold"] and not sig.get("viewer_clip"):
+        if score < cfg["detect_threshold"] and not sig.get("viewer_clip") and not sig.get("follow"):
             db.clip_update(clip_id, status="rejected", error=f"score final {score} sous le seuil {cfg['detect_threshold']}", **upd)
             return
         db.clip_update(clip_id, status="analyzing", **upd)
@@ -445,7 +460,7 @@ class Engine:
             res = ai.analyze_clip(streamer=srow.get("display_name") or c["streamer"], lang=c["lang"], target_lang=target,
                                   frames=frames, transcript=tr, chat_lines=(c["chat_summary"] or "").split("\n"),
                                   memory=srow.get("memory") or {}, open_series=[] if is_child else series.open_series(c["streamer"]),
-                                  duration=c["raw_out"] - c["raw_in"])
+                                  duration=c["raw_out"] - c["raw_in"], follow=bool((c["signals"] or {}).get("follow")))
             if res is None and ai.available()[0]:
                 raise RuntimeError("analyse IA indisponible")
         if res is not None:
@@ -457,6 +472,10 @@ class Engine:
         opened_ids = {s["id"] for s in series.open_series(c["streamer"])}
         if res is not None and cfg["series_boost"] and a["series"]["part_of_series"] and a["series"]["existing_series_id"] in opened_ids:
             threshold = max(1, threshold - 2)       # suite d'une histoire en cours : on est moins exigeant sur la note
+        elif res is not None and (c["signals"] or {}).get("follow") and not is_child:
+            db.clip_update(clip_id, status="rejected", error="suivi d'histoire : ce passage ne fait pas avancer l'histoire",
+                           ai=a, rating=a["rating"], category=a["category"], title=a["title"])
+            return
         upd = {"ai": a, "rating": a["rating"], "category": a["category"], "title": a["title"], "hook": a["hook"],
                "account_id": acc["id"] if acc else None, "target_lang": target}
         if not a.get("no_ai") and a["rating"] < threshold and not is_child:
@@ -520,10 +539,10 @@ class Engine:
     def _facecam(self, login: str, raw: str) -> dict | None:
         row = db.one("SELECT facecam FROM streamers WHERE login=?", [login]) or {}
         fc = row.get("facecam") or {}
-        if isinstance(fc, dict) and time.time() - fc.get("ts", 0) < 6 * 3600:
+        if isinstance(fc, dict) and fc.get("v") == 2 and time.time() - fc.get("ts", 0) < 6 * 3600:
             return fc.get("rect")
         rect = facecam.detect(raw)
-        db.update("streamers", "login", login, {"facecam": {"ts": time.time(), "rect": rect}})
+        db.update("streamers", "login", login, {"facecam": {"ts": time.time(), "rect": rect, "v": 2}})
         return rect
 
     def _do_edit(self, clip_id: int) -> None:

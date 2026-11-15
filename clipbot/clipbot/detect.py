@@ -182,6 +182,26 @@ class Detector:
         self.last_end = end
         return Moment(float(start), float(end), float(peak), round(combine(sigs, cfg["weights"]), 3), sigs, [peak], forced=True)
 
+    def force_follow(self, cfg: dict, window: int = 150) -> Moment | None:
+        """Histoire en cours sans nouveau pic : on prend le meilleur passage récent pour que l'IA juge s'il fait un épisode."""
+        if self.cursor is None or self.active is not None:
+            return None
+        hi = int(self.cursor) - 1
+        lo = max(int(self.last_end) + 1, hi - window)
+        secs = [s for s in range(lo, hi) if s in self.timeline]
+        if len(secs) < 20:
+            return None
+        peak = max(secs, key=lambda s: self.timeline[s]["score"])
+        dur = min(cfg["max_duration"], max(cfg["min_duration"], cfg.get("ideal_min", 0), 20))
+        end = min(float(hi), max(peak + dur * 0.5, lo + dur))
+        start = max(float(lo), end - dur)
+        if end - start < cfg["min_duration"]:
+            return None
+        sigs = {k: round(max(self.timeline[s].get(k, 0) for s in secs if start <= s <= end), 3) for k in BASE}
+        sigs["follow"] = 1.0
+        self.last_end = end
+        return Moment(start, end, float(peak), round(self.timeline[peak]["score"], 3), sigs, [peak], forced=True)
+
     def _gc(self, horizon: int) -> None:
         if len(self.timeline) > 900:
             for s in [s for s in self.timeline if s < horizon - 600]:

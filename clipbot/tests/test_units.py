@@ -137,3 +137,22 @@ def test_ai_budget_pause(fresh_db, monkeypatch):
     ok, why = ai.available()
     assert not ok and "budget" in why
     assert db.val("SELECT COUNT(*) FROM alerts WHERE kind='ai_budget'") == 1
+
+
+def test_facecam_frame_found_despite_static_lines_inside():
+    """Le cadre de la webcam (bords fixes) est retrouvé même si un objet fixe (lampe, étagère) traverse l'image de la cam."""
+    import numpy as np
+    from clipbot import facecam
+    rng = np.random.default_rng(0)
+    frames = []
+    for _ in range(10):
+        blocks = rng.integers(0, 255, (9, 13), dtype=np.uint8)    # « jeu » : formes qui changent et bougent à chaque image
+        ox, oy = rng.integers(0, 50, 2)
+        f = np.kron(blocks, np.ones((50, 60), np.uint8))[oy:oy + 360, ox:ox + 640].copy()
+        f[40:160, 30:230] = 90                                      # webcam : fond fixe
+        f[40:160, 30:33] = 255; f[40:160, 228:231] = 255            # bordure
+        f[40:43, 30:231] = 255; f[158:161, 30:231] = 255
+        f[40:160, 60:63] = 230                                      # lampe verticale fixe à l'intérieur
+        frames.append(f)
+    r = facecam.refine_rect(np.array(frames), mx=140, my=95, fw=40, fh=40)
+    assert r and abs(r[0] - 30) <= 4 and abs(r[2] - 230) <= 4 and abs(r[1] - 40) <= 4 and abs(r[3] - 160) <= 4

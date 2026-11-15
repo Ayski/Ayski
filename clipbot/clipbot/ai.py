@@ -134,7 +134,8 @@ Réponds uniquement avec l'objet structuré demandé."""
 
 
 def analyze_clip(*, streamer: str, lang: str, target_lang: str, frames: list[bytes], transcript: dict,
-                 chat_lines: list[str], memory: dict, open_series: list[dict], duration: float) -> ClipAnalysis | None:
+                 chat_lines: list[str], memory: dict, open_series: list[dict], duration: float,
+                 follow: bool = False) -> ClipAnalysis | None:
     """Renvoie l'analyse, ou None si l'IA est indisponible (clé absente, budget, erreur)."""
     ok, why = available()
     if not ok:
@@ -165,6 +166,7 @@ Mémoire du streamer :
 
 Séries ouvertes de ce streamer :
 {series_txt}
+{"Cet extrait a été prélevé automatiquement pour SUIVRE l'histoire en cours : part_of_series = true (avec l'id) seulement s'il montre une nouvelle étape claire de cette histoire, intéressante à regarder ; sinon false." if follow else ""}
 
 Titres que le propriétaire a aimés : {notes.get('liked_titles', [])[-5:]}
 Titres qu'il a trouvés nuls (à éviter) : {notes.get('disliked_titles', [])[-5:]}"""})

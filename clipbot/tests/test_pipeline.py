@@ -219,3 +219,21 @@ def test_series_only_drops_isolated_and_names_story(eng, raw_video):
     db.ex("UPDATE clips SET created_at=created_at-10")
     assert series.maintain() == []
     assert db.val("SELECT status FROM clips WHERE id=?", [cid]) == "rejected"
+
+
+def test_story_follow_makes_next_episode_or_drops(eng, raw_video):
+    cid = new_clip(raw_video)                                           # épisode 1 : ouvre l'histoire
+    eng.enqueue("tr", cid)
+    first = drain(eng, cid)
+    follow = {"audio": 0.1, "chat": 0.0, "emotes": 0, "motion": 0, "viewer_clip": 0, "follow": 1.0}
+    cid = new_clip(raw_video, 1)                                        # passage calme prélevé pour suivre l'histoire
+    db.clip_update(cid, signals=follow)
+    eng.enqueue("tr", cid)
+    c = drain(eng, cid)
+    assert c["series_id"] == first["series_id"] and c["episode"] == 2   # l'IA y voit la suite : épisode 2
+    eng.fake.series = False
+    cid = new_clip(raw_video, 2)
+    db.clip_update(cid, signals=follow)
+    eng.enqueue("tr", cid)
+    c = drain(eng, cid)
+    assert c["status"] == "rejected" and "histoire" in c["error"]      # pas de suite : écarté

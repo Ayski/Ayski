@@ -159,7 +159,8 @@ def render(job: EditJob) -> dict:
         cx, cy = int(info["w"] * fc["x"]), int(info["h"] * fc["y"])
         f.append("[vc]fps=30,split=2[g0][c0]")
         f.append(f"[g0]{zoom}crop=trunc(ih*1080/1280/2)*2:ih,scale=1080:1280:flags=bicubic,setsar=1[game]")
-        f.append(f"[c0]crop={cw}:{ch}:{cx}:{cy},scale=1080:640:flags=bicubic,setsar=1[cam]")
+        f.append(f"[c0]crop={cw}:{ch}:{cx}:{cy},scale=1080:640:force_original_aspect_ratio=increase:flags=bicubic,"
+                 "crop=1080:640,setsar=1[cam]")
         f.append("[cam][game]vstack=inputs=2[lay]")
         layout = "facecam"
     else:
