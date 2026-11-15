@@ -150,6 +150,10 @@ def test_series_order_cross_lang_and_upload_queue(eng, raw_video, monkeypatch):
     cfg = settings.all()
     db.ex("UPDATE clips SET status='queued' WHERE parent_id IS NOT NULL")
     acc_en = db.one("SELECT * FROM accounts WHERE id=?", [en])
+    assert eng._pick(acc_en, cfg) is None                              # histoire encore en cours : la série attend d'être complète
+    db.ex("UPDATE series SET status='closed'")
+    solo = new_clip(raw_video, 9, streamer="autre")                    # un clip isolé mieux noté ne doit pas s'intercaler
+    db.clip_update(solo, status="queued", account_id=en, rating=10, final_path=a["final_path"])
     first = eng._pick(acc_en, cfg)
     assert first["episode"] == 1                                       # séries dans l'ordre
     eng._upload(acc_en, first)                                         # 1er essai : quota → retour en file, rien de perdu
@@ -165,7 +169,10 @@ def test_series_order_cross_lang_and_upload_queue(eng, raw_video, monkeypatch):
         eng._check_publish(c)
     assert db.one("SELECT status FROM clips WHERE id=?", [first["id"]])["status"] == "uploaded_private"
     nxt = eng._pick(acc_en, cfg)
-    assert nxt["episode"] == 2
+    assert nxt["episode"] == 2                                         # la série se termine avant le clip isolé
+    db.clip_update(nxt["id"], status="uploaded_private", uploaded_at=time.time() - 9999)
+    assert eng._pick(acc_en, cfg)["id"] == solo
+    db.clip_update(solo, status="deleted")
     assert uploads[0][0] == en and uploads[0][2] == "SELF_ONLY"
 
     # sortie du mode test : les clips FR prêts rejoignent la file et partent dans l'ordre

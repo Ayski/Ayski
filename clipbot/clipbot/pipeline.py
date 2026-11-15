@@ -613,6 +613,16 @@ class Engine:
                  if series.can_upload(c)]
         if not cands:
             return None
+        # série entamée sur ce compte : on la termine, épisode par épisode, avant tout autre clip
+        for r in db.q("SELECT DISTINCT series_id FROM clips WHERE account_id=? AND series_id IS NOT NULL "
+                      "AND status IN ('uploading','uploaded_private','published')", [acc["id"]]):
+            if db.val("SELECT COUNT(*) FROM clips WHERE account_id=? AND series_id=? AND status IN "
+                      "('detected','transcribing','analyzing','editing','queued','uploading')", [acc["id"], r["series_id"]], 0):
+                nxt = [c for c in cands if c["series_id"] == r["series_id"]]
+                return min(nxt, key=lambda c: (c["episode"] or 0, c["id"])) if nxt else None
+        ready_series = [c for c in cands if c["series_id"]]
+        if ready_series:                # une série complète attend : elle passe avant les clips isolés
+            return min(ready_series, key=lambda c: (c["series_id"], c["episode"] or 0, c["id"]))
         recent = {r["streamer"]: r["n"] for r in db.q(
             "SELECT streamer, COUNT(*) n FROM clips WHERE account_id=? AND uploaded_at>=? GROUP BY streamer", [acc["id"], now - 86400])}
         # mélange des streamers : d'abord ceux qu'on a le moins publiés, puis la meilleure note ; séries dans l'ordre

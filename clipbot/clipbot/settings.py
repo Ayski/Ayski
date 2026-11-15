@@ -53,6 +53,7 @@ DEFAULTS: dict = {
     "series_only": False,              # option : ne garder que les clips qui font partie d'une histoire en plusieurs épisodes
     "solo_min_rating": 9,              # … sauf moment exceptionnel isolé noté au moins ceci (11 = jamais)
     "series_follow_minutes": 4,        # histoire en cours : toutes les N minutes sans clip, l'IA regarde le meilleur passage (0 = désactivé)
+    "series_upload_complete": True,    # une série n'est envoyée qu'une fois terminée, épisodes à la suite
     "series_boost": True,              # histoire en cours : détection plus sensible pour capter les épisodes suivants
     "cross_lang_min_rating": 8,
     "auto_adjust": False,
