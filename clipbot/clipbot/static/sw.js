@@ -1,7 +1,7 @@
 /* ClipBot — service worker minimal : met en cache la coquille statique, jamais /api ni /media. */
-const CACHE = 'clipbot-shell-v3';
-const SHELL = ['/', '/static/style.css?v=3', '/static/core.js?v=3', '/static/app.js?v=3', '/static/view-production.js?v=3',
-  '/static/view-streamers.js?v=3', '/static/view-accounts.js?v=3', '/static/view-clips.js?v=3', '/static/view-system.js?v=3',
+const CACHE = 'clipbot-shell-v4';
+const SHELL = ['/', '/static/style.css?v=4', '/static/core.js?v=4', '/static/app.js?v=4', '/static/view-production.js?v=4',
+  '/static/view-streamers.js?v=4', '/static/view-accounts.js?v=4', '/static/view-clips.js?v=4', '/static/view-system.js?v=4',
   '/static/vendor/chart.umd.js', '/static/icons/icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
