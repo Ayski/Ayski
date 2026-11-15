@@ -1,7 +1,7 @@
 /* Écran Comptes TikTok : connexion, réglages par compte (avec aperçu du style), statistiques. */
 'use strict';
 
-const PRIVACY = [['SELF_ONLY', 'Privé — moi uniquement (conseillé)'], ['MUTUAL_FOLLOW_FRIENDS', 'Amis'], ['FOLLOWER_OF_CREATOR', 'Abonnés'], ['PUBLIC_TO_EVERYONE', 'Public']];
+const PRIVACY = [['SELF_ONLY', 'Privé — moi uniquement (conseillé)'], ['INBOX', 'Brouillon — je publie moi-même depuis l\'appli TikTok'], ['MUTUAL_FOLLOW_FRIENDS', 'Amis'], ['FOLLOWER_OF_CREATOR', 'Abonnés'], ['PUBLIC_TO_EVERYONE', 'Public']];
 const POS = [['top', 'Haut'], ['middle', 'Milieu'], ['bottom', 'Bas']];
 const FONT_CSS = { 'Anton': 'Impact, "Arial Narrow Bold", sans-serif', 'Poppins ExtraBold': 'system-ui, sans-serif', 'Bangers': '"Comic Sans MS", Impact, sans-serif', 'Bebas Neue': 'Impact, "Arial Narrow", sans-serif' };
 
@@ -77,7 +77,7 @@ function accountCard(a, repaint) {
           F.text('Nom affiché', a.name, v => d.set('name', v)),
           F.select('Langue du compte', a.lang, Object.entries(LANGS), v => d.set('lang', v), { help: 'Titres, descriptions et sous-titres sont écrits dans cette langue.' }),
           F.toggle('Compte de test', a.is_test, v => d.set('is_test', v), { help: 'Seul type de compte utilisé en mode test.' }),
-          F.select('Visibilité à l\'upload', S.privacy, PRIVACY, set('privacy'), { help: 'Privé : tu passes toi-même les vidéos en public dans TikTok.' }),
+          F.select('Visibilité à l\'upload', S.privacy, PRIVACY, set('privacy'), { help: 'Privé : tu passes toi-même les vidéos en public dans TikTok (compte privé obligatoire tant que l\'app n\'est pas validée). Brouillon : la vidéo arrive dans les notifications de l\'appli TikTok, tu colles la description et tu publies ; pensé pour un compte public.' }),
           F.number('Clips par jour (maximum)', S.clips_per_day, set('clips_per_day'), { min: 0, max: 50 }),
           F.number('Écart minimal entre deux uploads (minutes)', S.min_gap_minutes, set('min_gap_minutes'), { min: 0 }),
           F.number('Durée minimale (s)', S.min_duration, set('min_duration'), { min: 3 }),

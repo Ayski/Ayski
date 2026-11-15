@@ -330,7 +330,7 @@ def edit_account(acc_id: int, body: dict = Body(...)):
     upd = {k: body[k] for k in ("lang", "is_test", "name") if k in body}
     if "settings" in body:
         s = settings._merge(a["settings"] or {}, {k: v for k, v in body["settings"].items() if k in settings.ACCOUNT_DEFAULTS})
-        if s.get("privacy") not in (None, "SELF_ONLY", "PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR"):
+        if s.get("privacy") not in (None, "SELF_ONLY", "INBOX", "PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR"):
             raise HTTPException(400, "Visibilité invalide")
         upd["settings"] = s
     db.update("accounts", "id", acc_id, upd)

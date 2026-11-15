@@ -181,18 +181,24 @@ def creator_info(acc_id: int) -> dict:
 
 
 def upload(acc_id: int, path: str, caption: str, privacy: str = "SELF_ONLY") -> str:
-    """Envoie la vidéo (Direct Post). Renvoie le publish_id."""
+    """Envoie la vidéo. Renvoie le publish_id.
+    privacy « INBOX » : brouillon déposé dans la boîte de réception TikTok du compte (l'utilisateur finit la publication
+    dans l'appli) ; sinon Direct Post avec la visibilité demandée."""
     size = os.path.getsize(path)
-    info = creator_info(acc_id)
-    options = info.get("privacy_level_options") or ["SELF_ONLY"]
-    if privacy not in options:
-        privacy = "SELF_ONLY" if "SELF_ONLY" in options else options[0]
     chunk = size if size <= 64 * 1024 * 1024 else 10 * 1024 * 1024
     count = 1 if chunk == size else max(1, math.floor(size / chunk))
-    d = _call(acc_id, "POST", "/v2/post/publish/video/init/", body={
-        "post_info": {"title": caption[:2200], "privacy_level": privacy, "disable_duet": False, "disable_comment": False,
-                      "disable_stitch": False, "video_cover_timestamp_ms": 1000},
-        "source_info": {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk, "total_chunk_count": count}})
+    source = {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk, "total_chunk_count": count}
+    if privacy == "INBOX":
+        d = _call(acc_id, "POST", "/v2/post/publish/inbox/video/init/", body={"source_info": source})
+    else:
+        info = creator_info(acc_id)
+        options = info.get("privacy_level_options") or ["SELF_ONLY"]
+        if privacy not in options:
+            privacy = "SELF_ONLY" if "SELF_ONLY" in options else options[0]
+        d = _call(acc_id, "POST", "/v2/post/publish/video/init/", body={
+            "post_info": {"title": caption[:2200], "privacy_level": privacy, "disable_duet": False, "disable_comment": False,
+                          "disable_stitch": False, "video_cover_timestamp_ms": 1000},
+            "source_info": source})
     url, pid = d["upload_url"], d["publish_id"]
     with open(path, "rb") as f:
         for i in range(count):

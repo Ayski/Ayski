@@ -682,11 +682,12 @@ class Engine:
         s = st.get("status", "")
         if s in ("PUBLISH_COMPLETE", "SEND_TO_USER_INBOX"):
             acc = db.one("SELECT * FROM accounts WHERE id=?", [c["account_id"]]) or {}
-            private = settings.account_settings(acc)["privacy"] == "SELF_ONLY" if acc else True
+            private = settings.account_settings(acc)["privacy"] in ("SELF_ONLY", "INBOX") if acc else True
             ids = st.get("publicaly_available_post_id") or st.get("publicly_available_post_id") or []
             db.clip_update(c["id"], status="uploaded_private" if private else "published", uploaded_at=time.time(),
                            video_id=str(ids[0]) if ids else None, force_upload=0, error=None, retries=0)
-            log("upload", f"Clip {c['id']} publié sur TikTok ({'privé' if private else 'public'})")
+            log("upload", f"Clip {c['id']} : " + ("brouillon déposé dans la boîte de réception TikTok, à publier depuis l'appli"
+                                                   if s == "SEND_TO_USER_INBOX" else f"publié sur TikTok ({'privé' if private else 'public'})"))
         elif s == "FAILED":
             reason = st.get("fail_reason", "inconnu")
             n = (c["retries"] or 0) + 1
