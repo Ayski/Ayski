@@ -305,7 +305,7 @@ class Engine:
             return
         wanted: dict[str, dict] = {}
         for login, t in self.test_sources.items():
-            wanted[login] = {"lang": t["lang"], "user_id": "", "viewers": 0, "source": t["source"], "rank": (-1, 0)}
+            wanted[login] = {"lang": t["lang"], "user_id": "", "viewers": 0, "source": t["source"], "rank": (-1, 0, 0)}
         if twitch.configured():
             gid = twitch.game_id(cfg["game"])
             rows = {r["login"]: r for r in db.q("SELECT * FROM streamers")}
@@ -330,9 +330,13 @@ class Engine:
                 if st == "excluded":
                     continue
                 lang = (r or {}).get("lang") or s["language"]
-                if st in ("target", "priority") or s["viewer_count"] >= cfg["viewer_thresholds"].get(s["language"], 10**9):
+                # stabilité : un stream déjà surveillé est gardé tant qu'il reste au-dessus de la moitié du seuil,
+                # et il passe avant les nouveaux venus (sinon le bot change de cible à chaque variation de viewers)
+                thr = cfg["viewer_thresholds"].get(s["language"], 10**9)
+                watched = login in self.workers
+                if st in ("target", "priority") or s["viewer_count"] >= (thr * 0.5 if watched else thr):
                     wanted[login] = {"lang": lang, "user_id": s["user_id"], "viewers": s["viewer_count"], "source": None,
-                                     "rank": ({"priority": 0, "target": 1}.get(st, 2), -s["viewer_count"]),
+                                     "rank": ({"priority": 0, "target": 1}.get(st, 2), 0 if watched else 1, -s["viewer_count"]),
                                      "name": s.get("user_name", login)}
             self.modules["surveillance"] = {"state": "ok", "detail": f"{len(live_all)} streams « {cfg['game']} » en direct"}
         elif not self.test_sources:
